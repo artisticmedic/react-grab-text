@@ -1,0 +1,41 @@
+import type { EditSource } from "./types.js";
+
+interface BuildEditPayloadOptions {
+  source: EditSource;
+  elementPreview: string;
+  before: string;
+  after: string;
+}
+
+const formatReference = (source: EditSource, elementPreview: string): string => {
+  const parts = [elementPreview];
+  if (source.componentName) parts.push(`in ${source.componentName}`);
+  if (source.filePath) {
+    const lineSuffix = source.lineNumber ? `:${source.lineNumber}` : "";
+    parts.push(`(at ${source.filePath}${lineSuffix})`);
+  }
+  return `[${parts.join(" ")}]`;
+};
+
+const formatTextBlock = (label: string, text: string): string => {
+  const normalized = text.trim();
+  if (normalized.includes("\n")) {
+    return `${label}:\n"""\n${normalized}\n"""`;
+  }
+  return `${label}: "${normalized}"`;
+};
+
+export const buildEditPayload = ({
+  source,
+  elementPreview,
+  before,
+  after,
+}: BuildEditPayloadOptions): string => {
+  return [
+    "Edit this text in the source: make the rendered text read as AFTER instead of BEFORE. Preserve surrounding markup, interpolations, and formatting.",
+    "",
+    formatReference(source, elementPreview),
+    formatTextBlock("BEFORE", before),
+    formatTextBlock("AFTER", after),
+  ].join("\n");
+};

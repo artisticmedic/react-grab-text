@@ -1,0 +1,69 @@
+{
+  "name": "react-grab-text",
+  "version": "0.1.0",
+  "description": "Text tool for React Grab — click text, edit it inline, copy the edit out with source context",
+  "keywords": [
+    "react-grab",
+    "react-grab-plugin",
+    "copyediting",
+    "devtools",
+    "react"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Tim Gailey"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "browser": "dist/global.global.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./global": "./dist/global.global.js"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "demo": "vite demo",
+    "demo:build": "vite build demo",
+    "test": "playwright test"
+  },
+  "peerDependencies": {
+    "react-grab": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react-grab": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-grab": "0.2.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
