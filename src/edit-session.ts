@@ -2,7 +2,6 @@ import {
   EDITING_ATTRIBUTE,
   FLASH_ATTRIBUTE,
   REACT_GRAB_INPUT_ATTRIBUTE,
-  SOURCE_RESOLVE_TIMEOUT_MS,
   SUCCESS_FLASH_DURATION_MS,
 } from "./constants.js";
 import type {
@@ -64,19 +63,20 @@ const flashElement = (element: HTMLElement): void => {
 const isEnterKey = (event: KeyboardEvent): boolean =>
   event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
 
-const resolveSourceWithTimeout = async (
+// Resolution starts at session start and is read synchronously at commit, so
+// the clipboard write stays inside the committing keystroke's task and never
+// waits on source resolution.
+const createSourceSnapshot = (
   fallback: EditSource,
   resolveSource?: () => Promise<EditSource>,
-): Promise<EditSource> => {
-  if (!resolveSource) return fallback;
-  const timeout = new Promise<EditSource>((resolve) => {
-    window.setTimeout(() => resolve(fallback), SOURCE_RESOLVE_TIMEOUT_MS);
-  });
-  try {
-    return await Promise.race([resolveSource(), timeout]);
-  } catch {
-    return fallback;
-  }
+): (() => EditSource) => {
+  let resolved = fallback;
+  resolveSource?.()
+    .then((value) => {
+      resolved = value;
+    })
+    .catch(() => undefined);
+  return () => resolved;
 };
 
 export const startEditSession = (options: EditSessionOptions): EditSessionHandle => {
@@ -90,7 +90,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   const beforeHtml = element.innerHTML;
   const beforeText = element.innerText;
   const elementPreview = buildElementPreview(element, beforeText);
-  const sourcePromise = resolveSourceWithTimeout(source, resolveSource);
+  const readResolvedSource = createSourceSnapshot(source, resolveSource);
   const previousContentEditable = element.getAttribute("contenteditable");
   const previousActiveElement = document.activeElement;
   let lastKnownRect = element.getBoundingClientRect();
@@ -178,9 +178,8 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
       return null;
     }
 
-    const resolvedSource = await sourcePromise;
     const payload = buildEditPayload({
-      source: resolvedSource,
+      source: readResolvedSource(),
       elementPreview,
       before: beforeText,
       after: afterText,
