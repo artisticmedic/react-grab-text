@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
-const DEMO_PORT = 5199;
+const DEMO_PORT = 5317;
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 // The script-tag harness loads both IIFE bundles the way a consumer with no

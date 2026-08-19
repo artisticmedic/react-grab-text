@@ -1,6 +1,11 @@
+import { POINTER_POSITION_MAX_AGE_MS } from "../constants.js";
 import type { Position } from "../types.js";
 
-let lastPointerPosition: Position | null = null;
+interface TrackedPointerPosition extends Position {
+  recordedAt: number;
+}
+
+let lastPointerPosition: TrackedPointerPosition | null = null;
 let trackerCount = 0;
 
 // The same convention react-grab's is-event-from-overlay uses: every piece of
@@ -15,7 +20,7 @@ const isFromReactGrabUi = (event: Event): boolean =>
 
 const handlePointerDown = (event: PointerEvent): void => {
   if (isFromReactGrabUi(event)) return;
-  lastPointerPosition = { x: event.clientX, y: event.clientY };
+  lastPointerPosition = { x: event.clientX, y: event.clientY, recordedAt: Date.now() };
 };
 
 export const startPointerTracking = (): (() => void) => {
@@ -38,4 +43,11 @@ export const startPointerTracking = (): (() => void) => {
   };
 };
 
-export const getLastPointerPosition = (): Position | null => lastPointerPosition;
+// A stale click point that happens to land inside a later edit target would
+// place the caret somewhere the user never clicked (reachable via the bare-key
+// shortcut path), so old positions expire instead of lingering.
+export const getLastPointerPosition = (): Position | null => {
+  if (!lastPointerPosition) return null;
+  if (Date.now() - lastPointerPosition.recordedAt > POINTER_POSITION_MAX_AGE_MS) return null;
+  return { x: lastPointerPosition.x, y: lastPointerPosition.y };
+};

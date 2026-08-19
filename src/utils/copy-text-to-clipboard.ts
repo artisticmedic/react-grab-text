@@ -26,6 +26,12 @@ export const copyTextToClipboard = async (text: string): Promise<boolean> => {
   textarea.style.opacity = "0";
 
   const previousActiveElement = document.activeElement;
+  // textarea.select() destroys the page's selection; a caret placed by a
+  // successor edit session between the failed writeText and this fallback
+  // must survive, so the range is restored explicitly.
+  const selection = window.getSelection();
+  const savedRange =
+    selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
   document.body.appendChild(textarea);
   textarea.select();
 
@@ -39,6 +45,10 @@ export const copyTextToClipboard = async (text: string): Promise<boolean> => {
   textarea.remove();
   if (previousActiveElement instanceof HTMLElement && previousActiveElement.isConnected) {
     previousActiveElement.focus({ preventScroll: true });
+  }
+  if (savedRange && selection) {
+    selection.removeAllRanges();
+    selection.addRange(savedRange);
   }
   return didCopy;
 };

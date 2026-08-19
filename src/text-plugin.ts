@@ -1,4 +1,10 @@
-import { ACTION_ID, ACTION_LABEL, ACTION_SHORTCUT, PLUGIN_NAME } from "./constants.js";
+import {
+  ACTION_ID,
+  ACTION_LABEL,
+  ACTION_SHORTCUT,
+  PLUGIN_NAME,
+  POINTER_POSITION_MAX_AGE_MS,
+} from "./constants.js";
 import { getActiveEditSession, startEditSession } from "./edit-session.js";
 import type {
   ReactGrabActionContext,
@@ -44,17 +50,19 @@ export const createTextPlugin = (): ReactGrabPlugin => {
   // react-grab swallows the selecting pointerdown before it can reach any
   // later-registered window listener, but its onDragStart hook reports that
   // pointerdown's page coordinates — the only reliable record of where the
-  // user actually clicked the element.
-  let selectionPagePoint: Position | null = null;
+  // user actually clicked the element. It fires for every selection (plain
+  // Copy grabs too), so the point expires like the tracker's does — a stale
+  // point landing inside a later target would misplace the caret.
+  let selectionPagePoint: (Position & { recordedAt: number }) | null = null;
 
   const takeCaretPoint = (): Position | undefined => {
-    if (selectionPagePoint) {
-      const clientPoint = {
-        x: selectionPagePoint.x - window.scrollX,
-        y: selectionPagePoint.y - window.scrollY,
+    const point = selectionPagePoint;
+    selectionPagePoint = null;
+    if (point && Date.now() - point.recordedAt <= POINTER_POSITION_MAX_AGE_MS) {
+      return {
+        x: point.x - window.scrollX,
+        y: point.y - window.scrollY,
       };
-      selectionPagePoint = null;
-      return clientPoint;
     }
     return getLastPointerPosition() ?? undefined;
   };
@@ -64,6 +72,10 @@ export const createTextPlugin = (): ReactGrabPlugin => {
     if (!isTextEditableElement(element)) return;
     const fallbackSource = buildSourceFromContext(context);
     context.hideContextMenu();
+    // The caret point must be taken BEFORE deactivate(): deactivation fires
+    // onStateChange(isActive: false) synchronously, which clears the stored
+    // selection point.
+    const caretPoint = takeCaretPoint();
     // Full deactivation (not context.cleanup) releases the pointer-events and
     // React-update freezes in every activation mode, so the page is live to type
     // into. Focus must land on the element after this call — deactivation
@@ -73,7 +85,7 @@ export const createTextPlugin = (): ReactGrabPlugin => {
       element,
       source: fallbackSource,
       resolveSource: createResolveSource(reactGrabApi, element, fallbackSource),
-      caretPoint: takeCaretPoint(),
+      caretPoint,
     });
   };
 
@@ -81,12 +93,18 @@ export const createTextPlugin = (): ReactGrabPlugin => {
     name: PLUGIN_NAME,
     hooks: {
       onDragStart: (startX, startY) => {
-        selectionPagePoint = { x: startX, y: startY };
+        selectionPagePoint = { x: startX, y: startY, recordedAt: Date.now() };
       },
       // Covers react-grab being reactivated over a live session through paths
-      // no pointerdown reaches (keyboard hold, programmatic activate).
+      // no pointerdown reaches (keyboard hold, programmatic activate). On
+      // deactivation the selection point is cleared so it cannot outlive the
+      // activation cycle that produced it.
       onStateChange: (state) => {
-        if (state.isActive) void getActiveEditSession()?.commit();
+        if (state.isActive) {
+          void getActiveEditSession()?.commit();
+        } else {
+          selectionPagePoint = null;
+        }
       },
     },
     setup: (api) => {

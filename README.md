@@ -45,6 +45,8 @@ Registration is race-free in both directions: if React Grab isn't initialized ye
 
 Verified against `react-grab@0.1.49` (the last release with the Style panel; live-tested inside a Next.js app) and `react-grab@0.2.0` (e2e suite). On 0.1.49 the Text row appears in the element context menu alongside Copy / Style / Comment / Open; on 0.2.0 it also appears in the toolbar's action menu and can be set as the toolbar's default action. Next.js app-router file paths are decoded (`(routes)`, `[slug]`) so payload paths exist on disk as written.
 
+One 0.1.49 caveat: it never normalizes a persisted toolbar `defaultAction`, so if `"text"` was stored (by a 0.2.0 session on the same origin) and the plugin is later absent, the stale id sticks — clear the `react-grab-toolbar-state` localStorage key if the toolbar misbehaves. 0.2.0 self-heals this.
+
 ## Notes
 
 - The action only enables on elements with visible text; form controls and media are excluded.

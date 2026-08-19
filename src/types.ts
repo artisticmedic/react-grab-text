@@ -32,7 +32,7 @@ declare global {
 }
 
 export interface EditSessionHandle {
-  commit: () => Promise<EditResult | null>;
+  commit: (options?: { quiet?: boolean }) => Promise<EditResult | null>;
   cancel: () => void;
   isActive: () => boolean;
 }

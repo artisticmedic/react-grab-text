@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const isCI = Boolean(process.env.CI);
 
-export const DEMO_PORT = 5199;
+export const DEMO_PORT = 5317;
 export const DEMO_URL = `http://localhost:${DEMO_PORT}`;
 
 export default defineConfig({

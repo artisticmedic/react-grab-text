@@ -58,5 +58,8 @@ export interface ReactGrabPlugin {
   name: string;
   actions?: ReactGrabContextMenuAction[];
   hooks?: ReactGrabPluginHooks;
+  // The real setup also receives a second ActionContextHooks argument
+  // (transformHtmlContent / onOpenFile / transformOpenFileUrl), not modeled
+  // here — this mirror covers only the surface this plugin uses.
   setup?: (api: ReactGrabApi) => ReactGrabPluginConfig | void;
 }

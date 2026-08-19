@@ -98,7 +98,9 @@ const createSourceSnapshot = (
 export const startEditSession = (options: EditSessionOptions): EditSessionHandle => {
   // Teardown inside commit is synchronous, so the prior session is fully
   // detached (and its typed edit preserved) before this one touches the DOM.
-  void activeSession?.commit();
+  // Quiet keeps the predecessor's status pill from stacking under this
+  // session's pill at the same rect.
+  void activeSession?.commit({ quiet: true });
 
   const { element, source, resolveSource, caretPoint, onFinish } = options;
 
@@ -192,8 +194,11 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     onFinish?.(null);
   };
 
-  const finishCommit = async (): Promise<EditResult | null> => {
+  const finishCommit = async (
+    commitOptions?: { quiet?: boolean },
+  ): Promise<EditResult | null> => {
     if (!isSessionActive) return null;
+    const isQuiet = Boolean(commitOptions?.quiet);
     const afterText = element.innerText;
     teardown();
 
@@ -203,7 +208,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
       // a mutation that no payload records.
       const didMutateDom = element.isConnected && element.innerHTML !== beforeHtml;
       if (didMutateDom) element.innerHTML = beforeHtml;
-      if (didMutateDom || afterText !== beforeText) {
+      if (!isQuiet && (didMutateDom || afterText !== beforeText)) {
         pill.showNoChange();
         repositionPill();
         window.setTimeout(() => {
@@ -226,15 +231,19 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     if (element.isConnected) flashElement(element);
     const didCopy = await copyTextToClipboard(payload);
 
-    if (didCopy) {
-      pill.showCopied();
-    } else {
-      pill.showError("Copy failed");
-    }
-    repositionPill();
-    window.setTimeout(() => {
+    if (isQuiet) {
       pill.destroy();
-    }, SUCCESS_FLASH_DURATION_MS);
+    } else {
+      if (didCopy) {
+        pill.showCopied();
+      } else {
+        pill.showError("Copy failed");
+      }
+      repositionPill();
+      window.setTimeout(() => {
+        pill.destroy();
+      }, SUCCESS_FLASH_DURATION_MS);
+    }
 
     const result: EditResult = { before: beforeText, after: afterText, payload, didCopy };
     window.dispatchEvent(new CustomEvent("react-grab-text:edit", { detail: result }));
@@ -244,16 +253,22 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
 
   const handleKeyDown = (event: KeyboardEvent): void => {
     if (event.isComposing || event.keyCode === 229) return;
-    // Escape ends the session from anywhere, so a focus move (find bar,
-    // programmatic focus) can never strand an edit that only an outside
-    // click could end.
+    const isInsideSession = isEventInsideSession(event);
+    // Escape inside the session cancels it and goes no further. An Escape
+    // originating elsewhere (host modal, find bar, moved focus) must neither
+    // destroy the typed edit nor be swallowed — commit and let the host's own
+    // Escape handling proceed.
     if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      finishCancel();
+      if (isInsideSession) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finishCancel();
+      } else {
+        void finishCommit();
+      }
       return;
     }
-    if (!isEventInsideSession(event)) return;
+    if (!isInsideSession) return;
     if (isEnterKey(event) && !event.shiftKey) {
       event.preventDefault();
       event.stopImmediatePropagation();

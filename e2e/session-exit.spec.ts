@@ -23,7 +23,45 @@ test("react-grab reactivating over a live session commits it", async ({ demo }) 
   expect(await demo.page.evaluate(() => window.__REACT_GRAB__?.isActive())).toBe(true);
 });
 
-test("Escape cancels the session even when focus has moved elsewhere", async ({ demo }) => {
+test("an out-of-session Escape commits the edit and passes through to the host", async ({
+  demo,
+}) => {
+  const replacement = "Survives the outside Escape";
+  const headline = demo.page.locator(HEADLINE);
+
+  await demo.startEditing(HEADLINE);
+  await demo.selectAllInEditor();
+  await demo.page.keyboard.type(replacement);
+  await expect(headline).toHaveText(replacement);
+
+  // Focus moves without a pointerdown — the case an outside-click commit
+  // cannot cover. The Escape is aimed at the host UI, so the typed edit must
+  // survive (commit, not cancel) and the host must still see the key.
+  await demo.focusElement(EMAIL_INPUT);
+  expect(await demo.page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe(
+    "email-input",
+  );
+  await demo.page.evaluate(() => {
+    (window as Window & { __escapeSeen?: number }).__escapeSeen = 0;
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        (window as Window & { __escapeSeen?: number }).__escapeSeen! += 1;
+      }
+    });
+  });
+
+  await demo.page.keyboard.press("Escape");
+
+  await demo.waitForSessionEnded(HEADLINE);
+  const edit = await demo.waitForTextEdit();
+  expect(edit.after).toBe(replacement);
+  await expect(headline).toHaveText(replacement);
+  expect(
+    await demo.page.evaluate(() => (window as Window & { __escapeSeen?: number }).__escapeSeen),
+  ).toBe(1);
+});
+
+test("Escape inside the session cancels and is swallowed", async ({ demo }) => {
   const headline = demo.page.locator(HEADLINE);
   const htmlBefore = await headline.evaluate((element) => element.innerHTML);
 
@@ -31,13 +69,6 @@ test("Escape cancels the session even when focus has moved elsewhere", async ({ 
   await demo.selectAllInEditor();
   await demo.page.keyboard.type("This should never survive");
   await expect(headline).toHaveText("This should never survive");
-
-  // Focus moves without a pointerdown — the case an outside-click commit
-  // cannot cover.
-  await demo.focusElement(EMAIL_INPUT);
-  expect(await demo.page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe(
-    "email-input",
-  );
 
   await demo.page.keyboard.press("Escape");
 
