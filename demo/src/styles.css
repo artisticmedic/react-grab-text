@@ -73,6 +73,14 @@ button {
   color: #52525b;
 }
 
+.shout {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4338ca;
+}
+
 kbd {
   padding: 1px 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

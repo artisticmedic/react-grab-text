@@ -4,6 +4,7 @@ const HEADLINE = '[data-testid="headline"]';
 const TAGLINE = '[data-testid="tagline"]';
 const INTRO = '[data-testid="intro"]';
 const FEATURE = '[data-testid="feature-recording"]';
+const SHOUT = '[data-testid="shout"]';
 
 const HEADLINE_TEXT = "Ship better copy without a handoff";
 const TAGLINE_TEXT = "Edit the words where they live.";
@@ -113,6 +114,27 @@ test.describe("inline text edit session", () => {
     const edit = await demo.waitForTextEdit();
     expect(edit.before).toBe("Studio-quality recording in the browser");
     expect(edit.after).toBe(replacement);
+  });
+
+  test("an uppercase element warns that BEFORE/AFTER are the rendered casing", async ({ demo }) => {
+    const shout = demo.page.locator(SHOUT);
+    // innerText reports the rendered text, so CSS-uppercased copy reads back
+    // shouted even though the source string is sentence case.
+    expect(await shout.evaluate((element) => (element as HTMLElement).innerText)).toBe(
+      "LIMITED TIME OFFER",
+    );
+
+    await demo.startEditing(SHOUT);
+    await demo.selectAllInEditor();
+    await demo.page.keyboard.type("Ends on friday");
+    await demo.page.keyboard.press("Enter");
+    await demo.waitForSessionEnded(SHOUT);
+
+    const edit = await demo.waitForTextEdit();
+    expect(edit.payload).toContain("NOTE: this element renders with CSS text-transform: uppercase");
+    expect(edit.payload).toContain("keep the source string's original casing");
+    expect(edit.before).toBe("LIMITED TIME OFFER");
+    expect(edit.after).toBe("ENDS ON FRIDAY");
   });
 
   test("an element with nested inline markup edits as one block of text", async ({ demo }) => {

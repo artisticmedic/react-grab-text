@@ -46,7 +46,7 @@
     "test": "playwright test"
   },
   "peerDependencies": {
-    "react-grab": ">=0.2.0"
+    "react-grab": ">=0.1.49"
   },
   "peerDependenciesMeta": {
     "react-grab": {

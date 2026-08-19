@@ -35,6 +35,13 @@ interface ContextMenuRow {
   isEnabled: boolean;
 }
 
+export interface CaretInfo {
+  isTextNode: boolean;
+  anchorOffset: number;
+  anchorText: string | null;
+  isAtContentEnd: boolean;
+}
+
 // A click has to land on the element's own text, otherwise react-grab targets
 // whichever nested element sits under the geometric center (the intro
 // paragraph wraps a <b>). Falls back to the center for elements with no direct
@@ -67,8 +74,13 @@ const getInteractionPosition = async (
 
 export interface DemoPageObject {
   page: Page;
-  goto: () => Promise<void>;
+  goto: (path?: string) => Promise<void>;
   waitForPluginRegistered: () => Promise<void>;
+  getRegisteredPlugins: () => Promise<string[]>;
+  hoverPointUntilTargeted: (selector: string, point: InteractionPosition) => Promise<void>;
+  clickPoint: (point: InteractionPosition) => Promise<void>;
+  focusElement: (selector: string) => Promise<void>;
+  getCaret: () => Promise<CaretInfo>;
   waitForActive: (expected: boolean) => Promise<void>;
   activateTextAction: () => Promise<void>;
   activate: () => Promise<void>;
@@ -105,9 +117,11 @@ const createDemoPageObject = (page: Page): DemoPageObject => {
     );
   };
 
-  const goto = async (): Promise<void> => {
-    await page.goto("/");
-    await expect(page.getByTestId("headline")).toBeVisible();
+  const getRegisteredPlugins = async (): Promise<string[]> =>
+    page.evaluate(() => window.__REACT_GRAB__?.getPlugins() ?? []);
+
+  const goto = async (path = "/"): Promise<void> => {
+    await page.goto(path);
     await waitForPluginRegistered();
   };
 
@@ -173,6 +187,53 @@ const createDemoPageObject = (page: Page): DemoPageObject => {
       }
     }
   };
+
+  // Same retry shape as hoverUntilTargeted, but the caret tests need the
+  // pointer at an exact viewport point (a specific word) rather than at the
+  // centre of a text node.
+  const hoverPointUntilTargeted = async (
+    selector: string,
+    point: InteractionPosition,
+  ): Promise<void> => {
+    for (let attempt = 1; attempt <= TARGET_HOVER_ATTEMPTS; attempt += 1) {
+      if (attempt > 1) await page.mouse.move(0, 0);
+      await page.mouse.move(point.x, point.y);
+      try {
+        await waitForTargeted(selector, TARGET_HOVER_TIMEOUT_MS);
+        return;
+      } catch (error) {
+        if (attempt === TARGET_HOVER_ATTEMPTS) throw error;
+      }
+    }
+  };
+
+  const clickPoint = async (point: InteractionPosition): Promise<void> => {
+    await page.mouse.click(point.x, point.y);
+  };
+
+  // Deliberately not a click: a pointerdown outside the element would commit
+  // the session before the key under test is ever pressed.
+  const focusElement = async (selector: string): Promise<void> => {
+    await page.locator(selector).first().evaluate((element) => {
+      (element as HTMLElement).focus();
+    });
+  };
+
+  const getCaret = async (): Promise<CaretInfo> =>
+    page.evaluate(() => {
+      const selection = window.getSelection();
+      const anchorNode = selection?.anchorNode ?? null;
+      const anchorOffset = selection?.anchorOffset ?? -1;
+      return {
+        isTextNode: anchorNode?.nodeType === Node.TEXT_NODE,
+        anchorOffset,
+        anchorText: anchorNode?.textContent ?? null,
+        // placeCaret's fallback collapses to the end of the element's
+        // contents, which anchors on the element itself, not a text node.
+        isAtContentEnd:
+          anchorNode instanceof Element && anchorOffset === anchorNode.childNodes.length,
+      };
+    });
 
   const clickTarget = async (selector: string): Promise<void> => {
     const element = page.locator(selector).first();
@@ -282,6 +343,11 @@ const createDemoPageObject = (page: Page): DemoPageObject => {
     page,
     goto,
     waitForPluginRegistered,
+    getRegisteredPlugins,
+    hoverPointUntilTargeted,
+    clickPoint,
+    focusElement,
+    getCaret,
     waitForActive,
     activateTextAction,
     activate,
@@ -302,8 +368,10 @@ const createDemoPageObject = (page: Page): DemoPageObject => {
   };
 };
 
-export const test = base.extend<{ demo: DemoPageObject }>({
-  demo: async ({ page }, use) => {
+export const test = base.extend<{ startPath: string; demo: DemoPageObject }>({
+  // Overridden with test.use({ startPath }) by the script-tag harness specs.
+  startPath: ["/", { option: true }],
+  demo: async ({ page, startPath }, use) => {
     await page.addInitScript(
       ({ storageKey, actionId }) => {
         try {
@@ -332,7 +400,7 @@ export const test = base.extend<{ demo: DemoPageObject }>({
       { storageKey: TOOLBAR_STORAGE_KEY, actionId: TEXT_ACTION_ID },
     );
     const demo = createDemoPageObject(page);
-    await demo.goto();
+    await demo.goto(startPath);
     await use(demo);
   },
 });

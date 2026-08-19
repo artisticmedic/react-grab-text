@@ -41,6 +41,10 @@ registerTextPlugin();
 
 Registration is race-free in both directions: if React Grab isn't initialized yet, the plugin waits for its `react-grab:init` event.
 
+## Compatibility
+
+Verified against `react-grab@0.1.49` (the last release with the Style panel; live-tested inside a Next.js app) and `react-grab@0.2.0` (e2e suite). On 0.1.49 the Text row appears in the element context menu alongside Copy / Style / Comment / Open; on 0.2.0 it also appears in the toolbar's action menu and can be set as the toolbar's default action. Next.js app-router file paths are decoded (`(routes)`, `[slug]`) so payload paths exist on disk as written.
+
 ## Notes
 
 - The action only enables on elements with visible text; form controls and media are excluded.

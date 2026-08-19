@@ -53,6 +53,11 @@ export const App = () => {
       </section>
 
       <section className="stack">
+        {/* Rendered uppercase by CSS: innerText reads back shouted, while the
+            source string is sentence case. */}
+        <p className="shout" data-testid="shout">
+          Limited time offer
+        </p>
         <p data-testid="renewal">Plan renews in {daysUntilRenewal} days</p>
         <TickCounter />
         <HotkeyTripwire />

@@ -34,7 +34,11 @@ export default defineConfig({
   ],
   webServer: {
     // react-grab only instruments in development, which is the Vite dev default.
-    command: `npx vite demo --port ${DEMO_PORT} --strictPort`,
+    // The build runs first because the script-tag harness serves the real
+    // dist/global.global.js. Note it is skipped when an already-running dev
+    // server is reused, so rebuild by hand after editing src with `npm run
+    // demo` up.
+    command: `npm run build && npx vite demo --port ${DEMO_PORT} --strictPort`,
     url: DEMO_URL,
     reuseExistingServer: !isCI,
     timeout: 60_000,

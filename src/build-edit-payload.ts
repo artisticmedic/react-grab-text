@@ -1,4 +1,5 @@
 import type { EditSource } from "./types.js";
+import { safeDecodeFilePath } from "./utils/safe-decode-file-path.js";
 
 interface BuildEditPayloadOptions {
   source: EditSource;
@@ -13,7 +14,7 @@ const formatReference = (source: EditSource, elementPreview: string): string => 
   if (source.componentName) parts.push(`in ${source.componentName}`);
   if (source.filePath) {
     const lineSuffix = source.lineNumber ? `:${source.lineNumber}` : "";
-    parts.push(`(at ${source.filePath}${lineSuffix})`);
+    parts.push(`(at ${safeDecodeFilePath(source.filePath)}${lineSuffix})`);
   }
   return `[${parts.join(" ")}]`;
 };

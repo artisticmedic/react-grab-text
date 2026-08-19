@@ -13,5 +13,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "demo/src", "demo/vite.config.ts", "e2e"]
+  "include": ["src", "demo/src", "e2e"]
 }
