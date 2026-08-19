@@ -10,6 +10,7 @@ import {
 export interface HintPill {
   showEditing: () => void;
   showCopied: () => void;
+  showNoChange: () => void;
   showError: (message: string) => void;
   reposition: (targetRect: DOMRect) => void;
   contains: (node: Node) => boolean;
@@ -105,6 +106,9 @@ export const createHintPill = (): HintPill => {
     },
     showCopied: () => {
       setContent([createStatusContent("✓", "#4ade80", "Copied")]);
+    },
+    showNoChange: () => {
+      setContent([createStatusContent("–", "#a1a1aa", "No text change")]);
     },
     showError: (message: string) => {
       setContent([createStatusContent("✕", "#f87171", message)]);

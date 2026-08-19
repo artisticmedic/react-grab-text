@@ -9,3 +9,8 @@ export type {
   EditSource,
   Position,
 } from "./types.js";
+export type {
+  ReactGrabActionContext,
+  ReactGrabApi,
+  ReactGrabPlugin,
+} from "./react-grab-types.js";

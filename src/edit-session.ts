@@ -1,6 +1,7 @@
 import {
   EDITING_ATTRIBUTE,
   FLASH_ATTRIBUTE,
+  REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE,
   REACT_GRAB_INPUT_ATTRIBUTE,
   SUCCESS_FLASH_DURATION_MS,
 } from "./constants.js";
@@ -46,16 +47,31 @@ const clearSelectionInside = (element: HTMLElement): void => {
   if (element.contains(selection.anchorNode)) selection.removeAllRanges();
 };
 
+const pendingFlashTimers = new WeakMap<HTMLElement, { frame: number; timeout: number }>();
+
+const cancelPendingFlash = (element: HTMLElement): void => {
+  const pending = pendingFlashTimers.get(element);
+  if (!pending) return;
+  cancelAnimationFrame(pending.frame);
+  window.clearTimeout(pending.timeout);
+  pendingFlashTimers.delete(element);
+};
+
 const flashElement = (element: HTMLElement): void => {
+  cancelPendingFlash(element);
   element.setAttribute(FLASH_ATTRIBUTE, "true");
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
+  const frame = requestAnimationFrame(() => {
+    const innerFrame = requestAnimationFrame(() => {
       element.setAttribute(FLASH_ATTRIBUTE, "fading");
     });
+    const pending = pendingFlashTimers.get(element);
+    if (pending) pending.frame = innerFrame;
   });
-  window.setTimeout(() => {
+  const timeout = window.setTimeout(() => {
     element.removeAttribute(FLASH_ATTRIBUTE);
+    pendingFlashTimers.delete(element);
   }, SUCCESS_FLASH_DURATION_MS);
+  pendingFlashTimers.set(element, { frame, timeout });
 };
 
 // react-grab patches KeyboardEvent.prototype.key to return "" for events it
@@ -80,18 +96,23 @@ const createSourceSnapshot = (
 };
 
 export const startEditSession = (options: EditSessionOptions): EditSessionHandle => {
-  activeSession?.cancel();
+  // Teardown inside commit is synchronous, so the prior session is fully
+  // detached (and its typed edit preserved) before this one touches the DOM.
+  void activeSession?.commit();
 
   const { element, source, resolveSource, caretPoint, onFinish } = options;
 
   ensureStyleSheet();
+  cancelPendingFlash(element);
   element.removeAttribute(FLASH_ATTRIBUTE);
 
   const beforeHtml = element.innerHTML;
   const beforeText = element.innerText;
   const elementPreview = buildElementPreview(element, beforeText);
+  const appliedTextTransform = getComputedStyle(element).textTransform;
   const readResolvedSource = createSourceSnapshot(source, resolveSource);
   const previousContentEditable = element.getAttribute("contenteditable");
+  const didHaveIgnoreEvents = element.hasAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE);
   const previousActiveElement = document.activeElement;
   let lastKnownRect = element.getBoundingClientRect();
   let isSessionActive = true;
@@ -104,6 +125,9 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   }
   element.setAttribute(EDITING_ATTRIBUTE, "true");
   element.setAttribute(REACT_GRAB_INPUT_ATTRIBUTE, "true");
+  // Keeps react-grab's earlier-registered window-capture handlers (activation
+  // hold detection, key blocking) off every event originating in the edit.
+  element.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
   element.focus({ preventScroll: true });
   placeCaret(element, caretPoint);
 
@@ -143,6 +167,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     element.removeEventListener("paste", handlePaste);
     element.removeAttribute(EDITING_ATTRIBUTE);
     element.removeAttribute(REACT_GRAB_INPUT_ATTRIBUTE);
+    if (!didHaveIgnoreEvents) element.removeAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE);
     if (previousContentEditable === null) {
       element.removeAttribute("contenteditable");
     } else {
@@ -173,7 +198,20 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     teardown();
 
     if (afterText.trim() === beforeText.trim()) {
-      pill.destroy();
+      // Whitespace-only and markup-flattening edits are classified no-op, so
+      // the DOM must be restored like cancel does — otherwise the page keeps
+      // a mutation that no payload records.
+      const didMutateDom = element.isConnected && element.innerHTML !== beforeHtml;
+      if (didMutateDom) element.innerHTML = beforeHtml;
+      if (didMutateDom || afterText !== beforeText) {
+        pill.showNoChange();
+        repositionPill();
+        window.setTimeout(() => {
+          pill.destroy();
+        }, SUCCESS_FLASH_DURATION_MS);
+      } else {
+        pill.destroy();
+      }
       onFinish?.(null);
       return null;
     }
@@ -183,6 +221,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
       elementPreview,
       before: beforeText,
       after: afterText,
+      textTransform: appliedTextTransform,
     });
     if (element.isConnected) flashElement(element);
     const didCopy = await copyTextToClipboard(payload);
@@ -204,18 +243,21 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   };
 
   const handleKeyDown = (event: KeyboardEvent): void => {
-    if (!isEventInsideSession(event)) return;
     if (event.isComposing || event.keyCode === 229) return;
-    if (isEnterKey(event) && !event.shiftKey) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void finishCommit();
-      return;
-    }
+    // Escape ends the session from anywhere, so a focus move (find bar,
+    // programmatic focus) can never strand an edit that only an outside
+    // click could end.
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopImmediatePropagation();
       finishCancel();
+      return;
+    }
+    if (!isEventInsideSession(event)) return;
+    if (isEnterKey(event) && !event.shiftKey) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void finishCommit();
       return;
     }
     if (event.key === "Tab") {

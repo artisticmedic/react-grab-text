@@ -21,8 +21,11 @@ const escapeAttributeValue = (value: string): string =>
 const escapeText = (value: string): string =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const truncate = (value: string, maxLength: number): string =>
-  value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+const truncate = (value: string, maxLength: number): string => {
+  const codePoints = Array.from(value);
+  if (codePoints.length <= maxLength) return value;
+  return `${codePoints.slice(0, maxLength - 1).join("")}…`;
+};
 
 export const buildElementPreview = (element: HTMLElement, textContent: string): string => {
   const tagName = element.tagName.toLowerCase();

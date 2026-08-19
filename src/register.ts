@@ -1,14 +1,11 @@
-import type { ReactGrabAPI } from "react-grab";
+import type { ReactGrabApi } from "./react-grab-types.js";
 import { createTextPlugin } from "./text-plugin.js";
 
-declare global {
-  interface Window {
-    __REACT_GRAB__?: ReactGrabAPI;
-  }
-}
+const getReactGrabApi = (): ReactGrabApi | undefined =>
+  (window as Window & { __REACT_GRAB__?: ReactGrabApi }).__REACT_GRAB__;
 
 const tryRegister = (): boolean => {
-  const api = window.__REACT_GRAB__;
+  const api = getReactGrabApi();
   if (!api || typeof api.registerPlugin !== "function") return false;
   try {
     // registerPlugin re-throws PluginSetupError into this call frame.

@@ -45,6 +45,7 @@ Registration is race-free in both directions: if React Grab isn't initialized ye
 
 - The action only enables on elements with visible text; form controls and media are excluded.
 - The page is live while you edit (React Grab's freeze is released), so a component that re-renders its own text mid-edit can repaint it; the committed payload is still built from what you typed.
+- Editing replaces the element's text nodes, so React stops updating that element's text afterwards (its fiber points at the old nodes). Fine for copyediting static strings; refresh to reattach live text like counters.
 - An `EditResult` (`{ before, after, payload, didCopy }`) is also dispatched as a `react-grab-text:edit` CustomEvent on `window` for tooling.
 
 ## Develop
