@@ -144,7 +144,10 @@ const guardKeyDown = (event: KeyboardEvent): void => {
     return;
   }
   // Insulate the edit from host-app hotkeys; the default action (typing) is
-  // unaffected by stopping propagation.
+  // unaffected by stopping propagation. Deliberately IMMEDIATE: it also
+  // silences window-capture listeners registered after the guards, which is
+  // the only ordering-proof way to keep app hotkeys (space = play/pause) from
+  // firing on keys typed inside a session — scoped to live sessions only.
   event.stopImmediatePropagation();
 };
 
@@ -183,6 +186,9 @@ const removeGuardListeners = (): void => {
 // installs them at setup, which runs at react-grab init — pre-hydration.
 export const installEditSessionGuards = (): (() => void) => {
   guardInstallCount += 1;
+  // A counted install takes ownership from any earlier fallback install, so
+  // plugin cleanup can actually remove the listeners.
+  areGuardsPermanentlyInstalled = false;
   addGuardListeners();
   let didUninstall = false;
   return () => {
