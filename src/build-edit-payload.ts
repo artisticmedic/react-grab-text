@@ -7,6 +7,7 @@ interface BuildEditPayloadOptions {
   before: string;
   after: string;
   textTransform?: string;
+  preserveWhitespace?: boolean;
 }
 
 const formatReference = (source: EditSource, elementPreview: string): string => {
@@ -19,8 +20,8 @@ const formatReference = (source: EditSource, elementPreview: string): string => 
   return `[${parts.join(" ")}]`;
 };
 
-const formatTextBlock = (label: string, text: string): string => {
-  const normalized = text.trim();
+const formatTextBlock = (label: string, text: string, preserveWhitespace?: boolean): string => {
+  const normalized = preserveWhitespace ? text : text.trim();
   if (normalized.includes("\n")) {
     return `${label}:\n"""\n${normalized}\n"""`;
   }
@@ -33,6 +34,7 @@ export const buildEditPayload = ({
   before,
   after,
   textTransform,
+  preserveWhitespace,
 }: BuildEditPayloadOptions): string => {
   const hasTextTransform = Boolean(textTransform) && textTransform !== "none";
   const instruction = [
@@ -45,7 +47,7 @@ export const buildEditPayload = ({
     instruction,
     "",
     formatReference(source, elementPreview),
-    formatTextBlock("BEFORE", before),
-    formatTextBlock("AFTER", after),
+    formatTextBlock("BEFORE", before, preserveWhitespace),
+    formatTextBlock("AFTER", after, preserveWhitespace),
   ].join("\n");
 };

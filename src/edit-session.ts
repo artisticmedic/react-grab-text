@@ -215,7 +215,11 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   const beforeHtml = element.innerHTML;
   const beforeText = element.innerText;
   const elementPreview = buildElementPreview(element, beforeText);
-  const appliedTextTransform = getComputedStyle(element).textTransform;
+  const computedStyle = getComputedStyle(element);
+  const appliedTextTransform = computedStyle.textTransform;
+  // In preformatted content boundary whitespace is a real, visible edit, so
+  // the trim-based no-op classification must not apply there.
+  const preservesWhitespace = computedStyle.whiteSpace.startsWith("pre");
   const readResolvedSource = createSourceSnapshot(source, resolveSource);
   const previousContentEditable = element.getAttribute("contenteditable");
   const didHaveIgnoreEvents = element.hasAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE);
@@ -292,7 +296,10 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     const afterText = element.innerText;
     teardown();
 
-    if (afterText.trim() === beforeText.trim()) {
+    const isUnchanged = preservesWhitespace
+      ? afterText === beforeText
+      : afterText.trim() === beforeText.trim();
+    if (isUnchanged) {
       // Whitespace-only and markup-flattening edits are classified no-op, so
       // the DOM must be restored like cancel does — otherwise the page keeps
       // a mutation that no payload records.
@@ -311,6 +318,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
       before: beforeText,
       after: afterText,
       textTransform: appliedTextTransform,
+      preserveWhitespace: preservesWhitespace,
     });
     if (element.isConnected) flashElement(element);
     const didCopy = await copyTextToClipboard(payload);
@@ -336,6 +344,10 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     cancel: finishCancel,
     isActive: () => isSessionActive,
   };
+  // The predecessor's commit runs onFinish synchronously, which can itself
+  // start another session; commit that reentrant session too before taking
+  // the active-session slot, or it would linger editable with dead handlers.
+  if (activeInternals) void activeInternals.commit({ quiet: true });
   activeSession = handle;
   activeInternals = { element, commit: finishCommit, cancel: finishCancel };
   return handle;

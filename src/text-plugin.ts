@@ -119,6 +119,9 @@ export const createTextPlugin = (): ReactGrabPlugin => {
       const uninstallGuards = installEditSessionGuards();
       return {
         cleanup: () => {
+          // Unregister/dispose/Fast Refresh must not strand a live session as
+          // a bare contenteditable with no handlers — commit it first.
+          void getActiveEditSession()?.commit({ quiet: true });
           reactGrabApi = null;
           selectionPagePoint = null;
           stopPointerTracking();
