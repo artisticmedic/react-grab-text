@@ -5,7 +5,11 @@ import {
   PLUGIN_NAME,
   POINTER_POSITION_MAX_AGE_MS,
 } from "./constants.js";
-import { getActiveEditSession, startEditSession } from "./edit-session.js";
+import {
+  getActiveEditSession,
+  installEditSessionGuards,
+  startEditSession,
+} from "./edit-session.js";
 import type {
   ReactGrabActionContext,
   ReactGrabApi,
@@ -110,11 +114,15 @@ export const createTextPlugin = (): ReactGrabPlugin => {
     setup: (api) => {
       reactGrabApi = api;
       const stopPointerTracking = startPointerTracking();
+      // Guards must register before the host app's hydration-time listeners so
+      // keys typed inside an edit can be stopped from reaching app hotkeys.
+      const uninstallGuards = installEditSessionGuards();
       return {
         cleanup: () => {
           reactGrabApi = null;
           selectionPagePoint = null;
           stopPointerTracking();
+          uninstallGuards();
           return undefined;
         },
       };

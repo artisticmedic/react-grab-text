@@ -8,42 +8,12 @@ import {
 } from "../constants.js";
 
 export interface HintPill {
-  showEditing: () => void;
   showCopied: () => void;
   showNoChange: () => void;
   showError: (message: string) => void;
   reposition: (targetRect: DOMRect) => void;
-  contains: (node: Node) => boolean;
   destroy: () => void;
 }
-
-const createKeyBadge = (keyText: string): HTMLSpanElement => {
-  const badge = document.createElement("span");
-  badge.textContent = keyText;
-  Object.assign(badge.style, {
-    padding: "2px 4px",
-    borderRadius: "4px",
-    background: "rgba(255, 255, 255, 0.13)",
-    fontSize: "10px",
-    fontWeight: "500",
-  });
-  return badge;
-};
-
-const createHintGroup = (keyText: string, labelText: string): HTMLSpanElement => {
-  const group = document.createElement("span");
-  Object.assign(group.style, {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "4px",
-  });
-  group.appendChild(createKeyBadge(keyText));
-  const label = document.createElement("span");
-  label.textContent = labelText;
-  label.style.opacity = "0.7";
-  group.appendChild(label);
-  return group;
-};
 
 const createStatusContent = (glyph: string, glyphColor: string, labelText: string): HTMLSpanElement => {
   const group = document.createElement("span");
@@ -71,7 +41,7 @@ export const createHintPill = (): HintPill => {
   pill.setAttribute("role", "status");
   Object.assign(pill.style, {
     position: "fixed",
-    pointerEvents: "auto",
+    pointerEvents: "none",
     top: "0",
     left: "0",
     zIndex: String(OVERLAY_Z_INDEX),
@@ -97,13 +67,6 @@ export const createHintPill = (): HintPill => {
   };
 
   return {
-    showEditing: () => {
-      setContent([
-        createHintGroup("↵", "save & copy"),
-        createHintGroup("⇧↵", "line break"),
-        createHintGroup("esc", "cancel"),
-      ]);
-    },
     showCopied: () => {
       setContent([createStatusContent("✓", "#4ade80", "Copied")]);
     },
@@ -126,7 +89,6 @@ export const createHintPill = (): HintPill => {
       pill.style.left = `${left}px`;
       pill.style.visibility = "visible";
     },
-    contains: (node: Node) => pill.contains(node),
     destroy: () => {
       pill.remove();
     },

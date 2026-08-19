@@ -86,7 +86,7 @@ test("the bare t shortcut starts a session on the hovered element", async ({ dem
   await demo.page.keyboard.press("t");
 
   await expect(demo.page.locator(TAGLINE)).toHaveAttribute(EDITING_ATTRIBUTE, "true");
-  await expect(demo.page.locator(HINT_PILL_SELECTOR)).toBeVisible();
+  await expect(demo.page.locator(HINT_PILL_SELECTOR)).toHaveCount(0);
   expect(await demo.page.evaluate(() => window.__REACT_GRAB__?.isActive())).toBe(false);
 
   // And it is a real session: it commits like any other.

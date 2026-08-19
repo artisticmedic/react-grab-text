@@ -16,10 +16,19 @@ import { buildEditPayload } from "./build-edit-payload.js";
 import { buildElementPreview } from "./utils/build-element-preview.js";
 import { caretRangeFromPoint } from "./utils/caret-range-from-point.js";
 import { copyTextToClipboard } from "./utils/copy-text-to-clipboard.js";
-import { createHintPill } from "./utils/create-hint-pill.js";
+import { createHintPill, type HintPill } from "./utils/create-hint-pill.js";
 import { ensureStyleSheet } from "./utils/ensure-style-sheet.js";
 
+interface SessionInternals {
+  element: HTMLElement;
+  commit: (options?: { quiet?: boolean }) => Promise<EditResult | null>;
+  cancel: () => void;
+}
+
 let activeSession: EditSessionHandle | null = null;
+let activeInternals: SessionInternals | null = null;
+let guardInstallCount = 0;
+let areGuardsPermanentlyInstalled = false;
 
 export const getActiveEditSession = (): EditSessionHandle | null => activeSession;
 
@@ -95,12 +104,107 @@ const createSourceSnapshot = (
   return () => resolved;
 };
 
+const isEventInsideActiveSession = (event: Event): boolean => {
+  const internals = activeInternals;
+  if (!internals) return false;
+  const target = event.composedPath()[0] ?? event.target;
+  return target instanceof Node && internals.element.contains(target);
+};
+
+const guardKeyDown = (event: KeyboardEvent): void => {
+  const internals = activeInternals;
+  if (!internals) return;
+  if (event.isComposing || event.keyCode === 229) return;
+  const isInsideSession = isEventInsideActiveSession(event);
+  // Escape inside the session cancels it and goes no further. An Escape
+  // originating elsewhere (host modal, find bar, moved focus) must neither
+  // destroy the typed edit nor be swallowed — commit and let the host's own
+  // Escape handling proceed.
+  if (event.key === "Escape") {
+    if (isInsideSession) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      internals.cancel();
+    } else {
+      void internals.commit();
+    }
+    return;
+  }
+  if (!isInsideSession) return;
+  if (isEnterKey(event) && !event.shiftKey) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void internals.commit();
+    return;
+  }
+  if (event.key === "Tab") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void internals.commit();
+    return;
+  }
+  // Insulate the edit from host-app hotkeys; the default action (typing) is
+  // unaffected by stopping propagation.
+  event.stopImmediatePropagation();
+};
+
+const guardKeyStop = (event: KeyboardEvent): void => {
+  if (isEventInsideActiveSession(event)) event.stopImmediatePropagation();
+};
+
+const guardPointerDown = (event: PointerEvent): void => {
+  const internals = activeInternals;
+  if (!internals) return;
+  const target = event.composedPath()[0] ?? event.target;
+  if (!(target instanceof Node)) return;
+  if (internals.element.contains(target)) return;
+  void internals.commit();
+};
+
+// addEventListener with identical handler refs and options is idempotent, so
+// repeated installs never duplicate listeners.
+const addGuardListeners = (): void => {
+  window.addEventListener("keydown", guardKeyDown, { capture: true });
+  window.addEventListener("keyup", guardKeyStop, { capture: true });
+  window.addEventListener("keypress", guardKeyStop, { capture: true });
+  window.addEventListener("pointerdown", guardPointerDown, { capture: true });
+};
+
+const removeGuardListeners = (): void => {
+  window.removeEventListener("keydown", guardKeyDown, { capture: true });
+  window.removeEventListener("keyup", guardKeyStop, { capture: true });
+  window.removeEventListener("keypress", guardKeyStop, { capture: true });
+  window.removeEventListener("pointerdown", guardPointerDown, { capture: true });
+};
+
+// Same-phase listeners run in registration order, so the guards must register
+// BEFORE the host app's hydration-time listeners or the app's own hotkeys
+// (space = play/pause, etc.) fire on keys typed inside an edit. The plugin
+// installs them at setup, which runs at react-grab init — pre-hydration.
+export const installEditSessionGuards = (): (() => void) => {
+  guardInstallCount += 1;
+  addGuardListeners();
+  let didUninstall = false;
+  return () => {
+    if (didUninstall) return;
+    didUninstall = true;
+    guardInstallCount -= 1;
+    if (guardInstallCount === 0 && !areGuardsPermanentlyInstalled) removeGuardListeners();
+  };
+};
+
+const ensureGuardsInstalled = (): void => {
+  if (guardInstallCount > 0 || areGuardsPermanentlyInstalled) return;
+  areGuardsPermanentlyInstalled = true;
+  addGuardListeners();
+};
+
 export const startEditSession = (options: EditSessionOptions): EditSessionHandle => {
   // Teardown inside commit is synchronous, so the prior session is fully
   // detached (and its typed edit preserved) before this one touches the DOM.
-  // Quiet keeps the predecessor's status pill from stacking under this
-  // session's pill at the same rect.
+  // Quiet skips the predecessor's status pill.
   void activeSession?.commit({ quiet: true });
+  ensureGuardsInstalled();
 
   const { element, source, resolveSource, caretPoint, onFinish } = options;
 
@@ -116,13 +220,19 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   const previousContentEditable = element.getAttribute("contenteditable");
   const didHaveIgnoreEvents = element.hasAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE);
   const previousActiveElement = document.activeElement;
-  let lastKnownRect = element.getBoundingClientRect();
+  const startRect = element.getBoundingClientRect();
   let isSessionActive = true;
-  let repositionFrame: number | null = null;
+
+  const handlePaste = (event: ClipboardEvent): void => {
+    if (element.getAttribute("contenteditable") !== "true") return;
+    event.preventDefault();
+    const pastedText = event.clipboardData?.getData("text/plain");
+    if (pastedText) document.execCommand("insertText", false, pastedText);
+  };
 
   element.setAttribute("contenteditable", "plaintext-only");
   if (!element.isContentEditable) {
-    // Firefox has no plaintext-only support; paste is sanitized below instead.
+    // Firefox has no plaintext-only support; paste is sanitized above instead.
     element.setAttribute("contenteditable", "true");
   }
   element.setAttribute(EDITING_ATTRIBUTE, "true");
@@ -130,42 +240,23 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
   // Keeps react-grab's earlier-registered window-capture handlers (activation
   // hold detection, key blocking) off every event originating in the edit.
   element.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
+  element.addEventListener("paste", handlePaste);
   element.focus({ preventScroll: true });
   placeCaret(element, caretPoint);
 
-  const pill = createHintPill();
-  pill.showEditing();
-
-  const repositionPill = (): void => {
-    if (element.isConnected) lastKnownRect = element.getBoundingClientRect();
-    pill.reposition(lastKnownRect);
-  };
-
-  const scheduleReposition = (): void => {
-    if (repositionFrame !== null) return;
-    repositionFrame = requestAnimationFrame(() => {
-      repositionFrame = null;
-      if (isSessionActive) repositionPill();
-    });
-  };
-
-  const isEventInsideSession = (event: Event): boolean => {
-    const target = event.composedPath()[0] ?? event.target;
-    if (!(target instanceof Node)) return false;
-    return element.contains(target) || pill.contains(target);
+  const showStatusPill = (configure: (pill: HintPill) => void): void => {
+    const pill = createHintPill();
+    configure(pill);
+    pill.reposition(element.isConnected ? element.getBoundingClientRect() : startRect);
+    window.setTimeout(() => {
+      pill.destroy();
+    }, SUCCESS_FLASH_DURATION_MS);
   };
 
   const teardown = (): void => {
     isSessionActive = false;
     activeSession = null;
-    if (repositionFrame !== null) cancelAnimationFrame(repositionFrame);
-    window.removeEventListener("keydown", handleKeyDown, { capture: true });
-    window.removeEventListener("keyup", handleKeyStop, { capture: true });
-    window.removeEventListener("keypress", handleKeyStop, { capture: true });
-    window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-    window.removeEventListener("scroll", handleScroll, { capture: true });
-    window.removeEventListener("resize", handleResize);
-    element.removeEventListener("input", handleInput);
+    activeInternals = null;
     element.removeEventListener("paste", handlePaste);
     element.removeAttribute(EDITING_ATTRIBUTE);
     element.removeAttribute(REACT_GRAB_INPUT_ATTRIBUTE);
@@ -190,7 +281,6 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     if (!isSessionActive) return;
     teardown();
     if (element.isConnected) element.innerHTML = beforeHtml;
-    pill.destroy();
     onFinish?.(null);
   };
 
@@ -209,13 +299,7 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
       const didMutateDom = element.isConnected && element.innerHTML !== beforeHtml;
       if (didMutateDom) element.innerHTML = beforeHtml;
       if (!isQuiet && (didMutateDom || afterText !== beforeText)) {
-        pill.showNoChange();
-        repositionPill();
-        window.setTimeout(() => {
-          pill.destroy();
-        }, SUCCESS_FLASH_DURATION_MS);
-      } else {
-        pill.destroy();
+        showStatusPill((pill) => pill.showNoChange());
       }
       onFinish?.(null);
       return null;
@@ -231,18 +315,14 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     if (element.isConnected) flashElement(element);
     const didCopy = await copyTextToClipboard(payload);
 
-    if (isQuiet) {
-      pill.destroy();
-    } else {
-      if (didCopy) {
-        pill.showCopied();
-      } else {
-        pill.showError("Copy failed");
-      }
-      repositionPill();
-      window.setTimeout(() => {
-        pill.destroy();
-      }, SUCCESS_FLASH_DURATION_MS);
+    if (!isQuiet) {
+      showStatusPill((pill) => {
+        if (didCopy) {
+          pill.showCopied();
+        } else {
+          pill.showError("Copy failed");
+        }
+      });
     }
 
     const result: EditResult = { before: beforeText, after: afterText, payload, didCopy };
@@ -251,91 +331,12 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     return result;
   };
 
-  const handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.isComposing || event.keyCode === 229) return;
-    const isInsideSession = isEventInsideSession(event);
-    // Escape inside the session cancels it and goes no further. An Escape
-    // originating elsewhere (host modal, find bar, moved focus) must neither
-    // destroy the typed edit nor be swallowed — commit and let the host's own
-    // Escape handling proceed.
-    if (event.key === "Escape") {
-      if (isInsideSession) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        finishCancel();
-      } else {
-        void finishCommit();
-      }
-      return;
-    }
-    if (!isInsideSession) return;
-    if (isEnterKey(event) && !event.shiftKey) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void finishCommit();
-      return;
-    }
-    if (event.key === "Tab") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void finishCommit();
-      return;
-    }
-    // Insulate the edit from host-app hotkeys; the default action (typing) is unaffected.
-    event.stopPropagation();
-  };
-
-  const handleKeyStop = (event: KeyboardEvent): void => {
-    if (!isEventInsideSession(event)) return;
-    event.stopPropagation();
-  };
-
-  const handlePointerDown = (event: PointerEvent): void => {
-    const target = event.composedPath()[0] ?? event.target;
-    if (!(target instanceof Node)) return;
-    if (element.contains(target)) return;
-    if (pill.contains(target)) {
-      event.preventDefault();
-      return;
-    }
-    void finishCommit();
-  };
-
-  const handleScroll = (): void => {
-    scheduleReposition();
-  };
-
-  const handleResize = (): void => {
-    scheduleReposition();
-  };
-
-  const handleInput = (): void => {
-    scheduleReposition();
-  };
-
-  const handlePaste = (event: ClipboardEvent): void => {
-    if (element.getAttribute("contenteditable") !== "true") return;
-    event.preventDefault();
-    const pastedText = event.clipboardData?.getData("text/plain");
-    if (pastedText) document.execCommand("insertText", false, pastedText);
-  };
-
-  window.addEventListener("keydown", handleKeyDown, { capture: true });
-  window.addEventListener("keyup", handleKeyStop, { capture: true });
-  window.addEventListener("keypress", handleKeyStop, { capture: true });
-  window.addEventListener("pointerdown", handlePointerDown, { capture: true });
-  window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
-  window.addEventListener("resize", handleResize);
-  element.addEventListener("input", handleInput);
-  element.addEventListener("paste", handlePaste);
-
-  repositionPill();
-
   const handle: EditSessionHandle = {
     commit: finishCommit,
     cancel: finishCancel,
     isActive: () => isSessionActive,
   };
   activeSession = handle;
+  activeInternals = { element, commit: finishCommit, cancel: finishCancel };
   return handle;
 };

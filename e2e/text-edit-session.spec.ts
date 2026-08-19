@@ -14,10 +14,8 @@ test.describe("inline text edit session", () => {
     const headline = await demo.startEditing(HEADLINE);
 
     await expect(headline).toHaveAttribute("contenteditable", /plaintext-only|true/);
-    const hintPill = demo.page.locator(HINT_PILL_SELECTOR);
-    await expect(hintPill).toBeVisible();
-    await expect(hintPill).toContainText("save & copy");
-    await expect(hintPill).toContainText("cancel");
+    // Editing shows no guide pill — the pill only appears as commit feedback.
+    await expect(demo.page.locator(HINT_PILL_SELECTOR)).toHaveCount(0);
     // The action deactivates react-grab so the page is live to type into.
     expect(await demo.page.evaluate(() => window.__REACT_GRAB__?.isActive())).toBe(false);
   });
