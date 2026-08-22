@@ -103,9 +103,12 @@ export const clearDeck = (): void => {
   notify();
 };
 
+// Subscribe-then-emit-current: the listener fires immediately with the
+// present snapshot, so subscribers need no separate priming read.
 export const subscribeDeck = (listener: DeckListener): (() => void) => {
   loadOnce();
   listeners.add(listener);
+  listener(getDeckItems());
   return () => {
     listeners.delete(listener);
   };

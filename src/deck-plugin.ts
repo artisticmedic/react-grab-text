@@ -7,9 +7,19 @@ import {
   subscribeDeck,
   type DeckCopyResult,
 } from "./deck-store.js";
-import { fencePayload, formatDeck } from "./format-deck.js";
+import { formatDeck } from "./format-deck.js";
 import type { ReactGrabPlugin } from "./react-grab-types.js";
 import { copyTextToClipboard } from "./utils/copy-text-to-clipboard.js";
+
+// A payload containing its own backtick runs (grabbed <code>/<pre> text) must
+// not terminate the fence early — size the fence past the longest run inside.
+// Runs in the host's shared copy pipeline, so every single grab is fenced
+// too: an explicit product decision, not deck-only plumbing.
+const fencePayload = (content: string): string => {
+  const longestRun = content.match(/`+/g)?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0;
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return fence + "\n" + content + "\n" + fence;
+};
 
 export const copyDeckToClipboard = async (): Promise<DeckCopyResult> => {
   const items = getDeckItems();
@@ -29,7 +39,7 @@ export const createDeckPlugin = (): ReactGrabPlugin => ({
   hooks: {
     // Runs before react-grab prepends the typed comment, so the fence wraps
     // only the element payload and the comment stays readable above it.
-    transformCopyContent: (content) => fencePayload(content),
+    transformCopyContent: fencePayload,
     // Content arrives as `comment\n<fenced payload>` (comment optional) —
     // every successful grab lands in the deck alongside the clipboard write.
     onCopySuccess: (_elements, content) => {
@@ -38,7 +48,6 @@ export const createDeckPlugin = (): ReactGrabPlugin => ({
   },
   setup: () => {
     const badge = createDeckBadge(async () => (await copyDeckToClipboard()).didCopy);
-    badge.update(getDeckItems().length);
     const unsubscribe = subscribeDeck((items) => badge.update(items.length));
     return {
       cleanup: () => {

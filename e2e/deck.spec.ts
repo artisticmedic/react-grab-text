@@ -5,33 +5,14 @@ const TAGLINE = '[data-testid="tagline"]';
 
 const BADGE = '[data-react-grab-deck-ui="badge"]';
 
-// One page-side traversal for everything that reaches into react-grab's
-// shadow root, parameterized on the fixtures' attribute like the fixtures'
-// own helpers.
-const inToolbar = async <T>(
-  demo: DemoPageObject,
-  fn: (root: Element, attributeName: string) => T,
-): Promise<T> =>
-  demo.page.evaluate(
-    ({ attributeName, body }) => {
-      const host = document.querySelector(`[${attributeName}]`);
-      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
-      if (!root) throw new Error("react-grab toolbar root not found");
-      // eslint-disable-next-line no-new-func
-      return new Function("root", "attributeName", `return (${body})(root, attributeName)`)(
-        root,
-        attributeName,
-      ) as T;
-    },
-    { attributeName: REACT_GRAB_ATTRIBUTE, body: fn.toString() },
-  );
-
 // The toolbar animates, so Playwright's hit-testing click never sees it
 // stable — click programmatically, same pattern as fixtures' activateTextAction.
 const clickBadge = async (demo: DemoPageObject): Promise<void> => {
-  await inToolbar(demo, (root) => {
-    root.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
-  });
+  await demo.page.evaluate((attributeName) => {
+    const host = document.querySelector(`[${attributeName}]`);
+    const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+    root?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
+  }, REACT_GRAB_ATTRIBUTE);
 };
 
 // A plain react-grab copy grab: activate select mode, click the target, then
@@ -56,22 +37,26 @@ test.describe("deck", () => {
     // Injection waits for the toolbar to exist (500ms reattach interval).
     await expect(badge).toBeAttached({ timeout: 10_000 });
     await expect(badge).toBeHidden();
-    const isAfterTextButton = await inToolbar(demo, (root) => {
-      const textButton = root.querySelector('[data-react-grab-toolbar-action="text"]');
+    const isAfterTextButton = await demo.page.evaluate((attributeName) => {
+      const host = document.querySelector(`[${attributeName}]`);
+      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+      const textButton = root?.querySelector('[data-react-grab-toolbar-action="text"]');
       return textButton?.nextElementSibling?.getAttribute("data-react-grab-deck-ui") === "badge";
-    });
+    }, REACT_GRAB_ATTRIBUTE);
     expect(isAfterTextButton).toBe(true);
 
     // The injected element gets none of react-grab's shadow styles — its
     // color must resolve to react-grab's own theme foreground token.
-    const colors = await inToolbar(demo, (root) => {
-      const badgeElement = root.querySelector('[data-react-grab-deck-ui="badge"]');
+    const colors = await demo.page.evaluate((attributeName) => {
+      const host = document.querySelector(`[${attributeName}]`);
+      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+      const badgeElement = root?.querySelector('[data-react-grab-deck-ui="badge"]');
       if (!badgeElement) return null;
       return {
         badge: getComputedStyle(badgeElement).color,
         theme: getComputedStyle(badgeElement).getPropertyValue("--rg-text-primary").trim(),
       };
-    });
+    }, REACT_GRAB_ATTRIBUTE);
     expect(colors).not.toBeNull();
     expect(colors!.theme).not.toBe("");
     // Resolve the token through a scratch element so both sides compare in

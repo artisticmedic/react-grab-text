@@ -1,5 +1,5 @@
 import {
-  DECK_BADGE_DRAG_SUPPRESS_THRESHOLD_PX as DRAG_SUPPRESS_THRESHOLD_PX,
+  DECK_BADGE_DRAG_SUPPRESS_THRESHOLD_PX,
   DECK_COPIED_FLASH_DURATION_MS,
   DECK_MAX_ITEMS,
   DECK_UI_ATTRIBUTE,
@@ -15,15 +15,21 @@ export interface DeckBadge {
 const TOOLBAR_HOST_SELECTOR = "[data-react-grab]";
 const TEXT_ACTION_SELECTOR = '[data-react-grab-toolbar-action="text"]';
 const REATTACH_INTERVAL_MS = 500;
+const FAILED_ATTACH_WARN_AT = 20;
+
+// "copying" spans the click-to-promise-resolution gap (the store empties
+// before the copy resolves, and the badge must stay visible through it);
+// "flash" is the 1600ms checkmark after a copy that left the deck empty.
+type BadgeStatus = "idle" | "copying" | "flash";
 
 // The deck's whole UI is one bare number sitting next to the Text "T" button
-// in react-grab's toolbar. Zero footprint while empty (display: none, so the
-// bar keeps its size); appears when items accumulate. Clicking it copies the
-// entire deck and flushes it.
+// in react-grab's toolbar. Zero footprint while empty; appears when items
+// accumulate. Clicking it copies the entire deck and flushes it.
 export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge => {
   let count = 0;
-  let isCopying = false;
-  let copiedFlashTimer: number | undefined;
+  let status: BadgeStatus = "idle";
+  let flashTimer: number | undefined;
+  let drag: { x: number; y: number; peak: number } | null = null;
 
   const badge = document.createElement("button");
   badge.type = "button";
@@ -59,93 +65,101 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
     userSelect: "none",
   });
 
+  const isShown = (): boolean => count > 0 || status !== "idle";
+
+  // A keyboard user's focus must not die on a control about to disappear.
+  const handOffFocus = (): void => {
+    const rootNode = badge.getRootNode();
+    if (rootNode instanceof ShadowRoot && rootNode.activeElement === badge) {
+      (badge.previousElementSibling as HTMLElement | null)?.focus?.();
+    }
+  };
 
   const render = (): void => {
-    const isFlashing = copiedFlashTimer !== undefined;
-    if (!isFlashing) badge.textContent = count > 0 ? String(count) : "";
-    const isShown = count > 0 || isCopying || isFlashing;
-    // A keyboard user's focus must not die on a control about to disappear.
-    if (!isShown && badge.getRootNode() instanceof ShadowRoot) {
-      const focusHolder = (badge.getRootNode() as ShadowRoot).activeElement;
-      if (focusHolder === badge) (badge.previousElementSibling as HTMLElement | null)?.focus?.();
-    }
-    // isCopying keeps the badge visible across the flush: the store empties
-    // (count drops to 0) before the copy promise resolves, and hiding at that
-    // moment would make the success flash invisible.
-    badge.style.display = isShown ? "inline-flex" : "none";
-    const label = isFlashing
-      ? "Deck copied to clipboard"
-      : count > 0
-        ? `Copy all ${count} deck items`
-        : "Deck empty";
+    if (status !== "flash") badge.textContent = count > 0 ? String(count) : "";
+    if (!isShown()) handOffFocus();
+    badge.style.display = isShown() ? "inline-flex" : "none";
+    const label =
+      status === "flash"
+        ? "Deck copied to clipboard"
+        : count > 0
+          ? `Copy all ${count} deck items`
+          : "Deck empty";
     badge.setAttribute("aria-label", label);
     badge.title =
       count >= DECK_MAX_ITEMS ? `Deck full (${DECK_MAX_ITEMS}) — oldest grabs drop off` : label;
   };
+
+  const setStatus = (next: BadgeStatus): void => {
+    if (status === next) return;
+    if (flashTimer !== undefined) {
+      window.clearTimeout(flashTimer);
+      flashTimer = undefined;
+    }
+    status = next;
+    if (next === "flash") {
+      badge.textContent = "✓";
+      flashTimer = window.setTimeout(() => {
+        flashTimer = undefined;
+        status = "idle";
+        render();
+      }, DECK_COPIED_FLASH_DURATION_MS);
+    }
+    render();
+  };
+
   // The toolbar can be dragged starting on the badge: its bubbling
   // pointerdown handler begins the drag, and the browser still fires click on
   // release. Suppress the copy when the gesture's PEAK travel crossed the
   // drag threshold — endpoint distance alone misses a drag that returns to
   // its origin, which still moved the toolbar. Movement is tracked on window
   // because the host may capture the pointer mid-drag.
-  let dragOrigin: { x: number; y: number } | null = null;
-  let dragPeakTravel = 0;
   const trackDragTravel = (event: PointerEvent): void => {
-    if (!dragOrigin) return;
-    dragPeakTravel = Math.max(
-      dragPeakTravel,
-      Math.hypot(event.clientX - dragOrigin.x, event.clientY - dragOrigin.y),
-    );
+    if (!drag) return;
+    drag.peak = Math.max(drag.peak, Math.hypot(event.clientX - drag.x, event.clientY - drag.y));
   };
   const endDragTracking = (): void => {
     window.removeEventListener("pointermove", trackDragTravel);
+    window.removeEventListener("pointerup", endDragTracking);
+    window.removeEventListener("pointercancel", endDragTracking);
   };
   badge.addEventListener("pointerdown", (event) => {
-    dragOrigin = { x: event.clientX, y: event.clientY };
-    dragPeakTravel = 0;
+    drag = { x: event.clientX, y: event.clientY, peak: 0 };
     window.addEventListener("pointermove", trackDragTravel);
-    window.addEventListener("pointerup", endDragTracking, { once: true });
-    window.addEventListener("pointercancel", endDragTracking, { once: true });
+    window.addEventListener("pointerup", endDragTracking);
+    window.addEventListener("pointercancel", endDragTracking);
   });
+
   badge.addEventListener("click", () => {
-    const wasDrag = dragPeakTravel > DRAG_SUPPRESS_THRESHOLD_PX;
-    dragOrigin = null;
-    dragPeakTravel = 0;
-    if (wasDrag) return;
-    if (count === 0 || isCopying || copiedFlashTimer !== undefined) return;
-    isCopying = true;
+    const wasDrag = drag !== null && drag.peak > DECK_BADGE_DRAG_SUPPRESS_THRESHOLD_PX;
+    drag = null;
+    if (wasDrag || count === 0 || status !== "idle") return;
+    setStatus("copying");
     void onCopyAll()
       .then((didCopy) => {
         // Flash only when the flush left the deck empty — a grab that landed
         // during the clipboard await must show as its count, not sit masked
         // and unclickable behind the checkmark.
-        if (didCopy && count === 0) {
-          badge.textContent = "✓";
-          copiedFlashTimer = window.setTimeout(() => {
-            copiedFlashTimer = undefined;
-            render();
-          }, DECK_COPIED_FLASH_DURATION_MS);
-        }
+        if (didCopy && count === 0) setStatus("flash");
       })
       .catch(() => {
         // A rejected copy (throwing external subscriber, clipboard failure
-        // path) must not strand isCopying and dead-lock the badge.
+        // path) must not strand the badge in "copying" and dead-lock it.
       })
       .finally(() => {
-        isCopying = false;
-        render();
+        if (status === "copying") setStatus("idle");
       });
   });
 
-  // The toolbar lives in react-grab's open shadow root and re-renders on state
-  // changes, which can drop injected children — a low-cost interval re-inserts
-  // the badge after the Text action button whenever it goes missing. It also
-  // covers the toolbar mounting late (script-tag installs, toolbar toggles).
+  // The toolbar lives in react-grab's open shadow root and re-renders on
+  // state changes, which can drop injected children — a low-cost interval
+  // re-inserts the badge whenever it goes missing. It also covers the toolbar
+  // mounting late (script-tag installs, toolbar toggles).
   let failedAttachAttempts = 0;
   const attach = (): void => {
     if (badge.isConnected) return;
     failedAttachAttempts += 1;
-    if (failedAttachAttempts === 20) {
+    if (failedAttachAttempts === FAILED_ATTACH_WARN_AT) {
       console.warn(
         "[react-grab-text] deck badge found no toolbar anchor after 10s — host toolbar markup may have changed",
       );
@@ -171,15 +185,12 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
       count = nextCount;
       // A grab landing during the success flash must not sit masked behind
       // the checkmark (unreadable and unclickable for the flash window).
-      if (nextCount > 0 && copiedFlashTimer !== undefined) {
-        window.clearTimeout(copiedFlashTimer);
-        copiedFlashTimer = undefined;
-      }
-      render();
+      if (nextCount > 0 && status === "flash") setStatus("idle");
+      else render();
     },
     destroy: () => {
       window.clearInterval(reattachTimer);
-      if (copiedFlashTimer !== undefined) window.clearTimeout(copiedFlashTimer);
+      if (flashTimer !== undefined) window.clearTimeout(flashTimer);
       endDragTracking();
       badge.remove();
     },

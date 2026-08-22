@@ -10,7 +10,7 @@ export {
   removeDeckItems,
   subscribeDeck,
 } from "./deck-store.js";
-export { fencePayload, formatDeck } from "./format-deck.js";
+export { formatDeck } from "./format-deck.js";
 export type { DeckCopyResult, DeckItem } from "./deck-store.js";
 export type {
   EditResult,
