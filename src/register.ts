@@ -12,7 +12,9 @@ const tryRegister = (createPlugin: () => ReactGrabPlugin): boolean => {
     // registerPlugin re-throws PluginSetupError into this call frame.
     api.registerPlugin(createPlugin());
   } catch (error) {
-    console.warn("[react-grab-text] Failed to register plugin:", error);
+    // Loud on purpose: a setup() throw here means the plugin silently never
+    // exists for the whole page load.
+    console.error("[react-grab-text] Failed to register plugin:", error);
   }
   return true;
 };

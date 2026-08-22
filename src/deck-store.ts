@@ -77,13 +77,14 @@ export const addDeckItem = (content: string): DeckItem | null => {
   const trimmed = content.trim();
   if (!trimmed) return null;
   const item: DeckItem = { id: createItemId(), content: trimmed };
+  if (items.length >= DECK_MAX_ITEMS) {
+    console.warn(
+      `[react-grab-text] deck full (${DECK_MAX_ITEMS}) — dropping the oldest grab to queue this one`,
+    );
+  }
   items = [...items, item].slice(-DECK_MAX_ITEMS);
   notify();
   return item;
-};
-
-export const removeDeckItem = (id: string): void => {
-  removeDeckItems([id]);
 };
 
 export const removeDeckItems = (ids: readonly string[]): void => {

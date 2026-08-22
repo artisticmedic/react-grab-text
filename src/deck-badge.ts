@@ -1,7 +1,9 @@
 import {
   DECK_COPIED_FLASH_DURATION_MS,
+  DECK_MAX_ITEMS,
   DECK_UI_ATTRIBUTE,
   REACT_GRAB_IGNORE_ATTRIBUTE,
+  REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE,
 } from "./constants.js";
 
 export interface DeckBadge {
@@ -25,7 +27,13 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
   const badge = document.createElement("button");
   badge.type = "button";
   badge.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
+  // The toolbar panel already exempts its subtree from the host's global
+  // pointer/key handlers; carrying the attribute directly matches the host's
+  // own buttons and survives a build where the panel-level exemption moves.
+  badge.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
   badge.setAttribute(DECK_UI_ATTRIBUTE, "badge");
+  // Announce content swaps (count, checkmark) to assistive technology.
+  badge.setAttribute("aria-live", "polite");
   Object.assign(badge.style, {
     // Sized to the sibling action buttons so the bar never grows; hidden
     // entirely while the deck is empty so it adds no width either. The
@@ -54,37 +62,64 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
   const render = (): void => {
     const isFlashing = copiedFlashTimer !== undefined;
     if (!isFlashing) badge.textContent = count > 0 ? String(count) : "";
+    const isShown = count > 0 || isCopying || isFlashing;
+    // A keyboard user's focus must not die on a control about to disappear.
+    if (!isShown && badge.getRootNode() instanceof ShadowRoot) {
+      const focusHolder = (badge.getRootNode() as ShadowRoot).activeElement;
+      if (focusHolder === badge) (badge.previousElementSibling as HTMLElement | null)?.focus?.();
+    }
     // isCopying keeps the badge visible across the flush: the store empties
     // (count drops to 0) before the copy promise resolves, and hiding at that
     // moment would make the success flash invisible.
-    badge.style.display = count > 0 || isCopying || isFlashing ? "inline-flex" : "none";
-    badge.setAttribute(
-      "aria-label",
-      count > 0 ? `Copy all ${count} deck items` : "Deck empty",
-    );
+    badge.style.display = isShown ? "inline-flex" : "none";
+    const label = isFlashing
+      ? "Deck copied to clipboard"
+      : count > 0
+        ? `Copy all ${count} deck items`
+        : "Deck empty";
+    badge.setAttribute("aria-label", label);
+    badge.title =
+      count >= DECK_MAX_ITEMS ? `Deck full (${DECK_MAX_ITEMS}) — oldest grabs drop off` : label;
   };
   badge.addEventListener("click", () => {
     if (count === 0 || isCopying || copiedFlashTimer !== undefined) return;
     isCopying = true;
-    void onCopyAll().then((didCopy) => {
-      isCopying = false;
-      if (didCopy) {
-        badge.textContent = "✓";
-        copiedFlashTimer = window.setTimeout(() => {
-          copiedFlashTimer = undefined;
-          render();
-        }, DECK_COPIED_FLASH_DURATION_MS);
-      }
-      render();
-    });
+    void onCopyAll()
+      .then((didCopy) => {
+        // Flash only when the flush left the deck empty — a grab that landed
+        // during the clipboard await must show as its count, not sit masked
+        // and unclickable behind the checkmark.
+        if (didCopy && count === 0) {
+          badge.textContent = "✓";
+          copiedFlashTimer = window.setTimeout(() => {
+            copiedFlashTimer = undefined;
+            render();
+          }, DECK_COPIED_FLASH_DURATION_MS);
+        }
+      })
+      .catch(() => {
+        // A rejected copy (throwing external subscriber, clipboard failure
+        // path) must not strand isCopying and dead-lock the badge.
+      })
+      .finally(() => {
+        isCopying = false;
+        render();
+      });
   });
 
   // The toolbar lives in react-grab's open shadow root and re-renders on state
   // changes, which can drop injected children — a low-cost interval re-inserts
   // the badge after the Text action button whenever it goes missing. It also
   // covers the toolbar mounting late (script-tag installs, toolbar toggles).
+  let failedAttachAttempts = 0;
   const attach = (): void => {
     if (badge.isConnected) return;
+    failedAttachAttempts += 1;
+    if (failedAttachAttempts === 20) {
+      console.warn(
+        "[react-grab-text] deck badge found no toolbar anchor after 10s — host toolbar markup may have changed",
+      );
+    }
     const root = document
       .querySelector(TOOLBAR_HOST_SELECTOR)
       ?.shadowRoot?.querySelector(TOOLBAR_HOST_SELECTOR);
@@ -96,6 +131,7 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
       (actionButtons?.length ? actionButtons[actionButtons.length - 1] : null);
     if (!anchor) return;
     anchor.insertAdjacentElement("afterend", badge);
+    failedAttachAttempts = 0;
   };
   attach();
   const reattachTimer = window.setInterval(attach, REATTACH_INTERVAL_MS);

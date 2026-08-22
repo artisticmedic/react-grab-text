@@ -7,7 +7,6 @@ export {
   addDeckItem,
   clearDeck,
   getDeckItems,
-  removeDeckItem,
   removeDeckItems,
   subscribeDeck,
 } from "./deck-store.js";
