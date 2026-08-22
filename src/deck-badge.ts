@@ -84,18 +84,33 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
   };
   // The toolbar can be dragged starting on the badge: its bubbling
   // pointerdown handler begins the drag, and the browser still fires click on
-  // release. Suppress the copy when the pointer moved like a drag — the same
-  // drag-aware treatment the host's own action buttons get.
-  let pointerDownPoint: { x: number; y: number } | null = null;
+  // release. Suppress the copy when the gesture's PEAK travel crossed the
+  // drag threshold — endpoint distance alone misses a drag that returns to
+  // its origin, which still moved the toolbar. Movement is tracked on window
+  // because the host may capture the pointer mid-drag.
+  let dragOrigin: { x: number; y: number } | null = null;
+  let dragPeakTravel = 0;
+  const trackDragTravel = (event: PointerEvent): void => {
+    if (!dragOrigin) return;
+    dragPeakTravel = Math.max(
+      dragPeakTravel,
+      Math.hypot(event.clientX - dragOrigin.x, event.clientY - dragOrigin.y),
+    );
+  };
+  const endDragTracking = (): void => {
+    window.removeEventListener("pointermove", trackDragTravel);
+  };
   badge.addEventListener("pointerdown", (event) => {
-    pointerDownPoint = { x: event.clientX, y: event.clientY };
+    dragOrigin = { x: event.clientX, y: event.clientY };
+    dragPeakTravel = 0;
+    window.addEventListener("pointermove", trackDragTravel);
+    window.addEventListener("pointerup", endDragTracking, { once: true });
+    window.addEventListener("pointercancel", endDragTracking, { once: true });
   });
-  badge.addEventListener("click", (event) => {
-    const wasDrag =
-      pointerDownPoint !== null &&
-      Math.hypot(event.clientX - pointerDownPoint.x, event.clientY - pointerDownPoint.y) >
-        DRAG_SUPPRESS_THRESHOLD_PX;
-    pointerDownPoint = null;
+  badge.addEventListener("click", () => {
+    const wasDrag = dragPeakTravel > DRAG_SUPPRESS_THRESHOLD_PX;
+    dragOrigin = null;
+    dragPeakTravel = 0;
     if (wasDrag) return;
     if (count === 0 || isCopying || copiedFlashTimer !== undefined) return;
     isCopying = true;
@@ -165,6 +180,7 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
     destroy: () => {
       window.clearInterval(reattachTimer);
       if (copiedFlashTimer !== undefined) window.clearTimeout(copiedFlashTimer);
+      endDragTracking();
       badge.remove();
     },
   };
