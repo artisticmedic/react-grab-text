@@ -42,3 +42,6 @@ export const DECK_STORAGE_KEY = "react-grab-deck";
 export const DECK_MAX_ITEMS = 50;
 export const DECK_ITEM_SEPARATOR = "\n--\n";
 export const DECK_COPIED_FLASH_DURATION_MS = 1600;
+// Matches the host toolbar's own drag threshold: pointer travel beyond this
+// between pointerdown and click means the user was dragging the toolbar.
+export const DECK_BADGE_DRAG_SUPPRESS_THRESHOLD_PX = 5;

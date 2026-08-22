@@ -1,4 +1,5 @@
 import {
+  DECK_BADGE_DRAG_SUPPRESS_THRESHOLD_PX as DRAG_SUPPRESS_THRESHOLD_PX,
   DECK_COPIED_FLASH_DURATION_MS,
   DECK_MAX_ITEMS,
   DECK_UI_ATTRIBUTE,
@@ -81,7 +82,21 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
     badge.title =
       count >= DECK_MAX_ITEMS ? `Deck full (${DECK_MAX_ITEMS}) — oldest grabs drop off` : label;
   };
-  badge.addEventListener("click", () => {
+  // The toolbar can be dragged starting on the badge: its bubbling
+  // pointerdown handler begins the drag, and the browser still fires click on
+  // release. Suppress the copy when the pointer moved like a drag — the same
+  // drag-aware treatment the host's own action buttons get.
+  let pointerDownPoint: { x: number; y: number } | null = null;
+  badge.addEventListener("pointerdown", (event) => {
+    pointerDownPoint = { x: event.clientX, y: event.clientY };
+  });
+  badge.addEventListener("click", (event) => {
+    const wasDrag =
+      pointerDownPoint !== null &&
+      Math.hypot(event.clientX - pointerDownPoint.x, event.clientY - pointerDownPoint.y) >
+        DRAG_SUPPRESS_THRESHOLD_PX;
+    pointerDownPoint = null;
+    if (wasDrag) return;
     if (count === 0 || isCopying || copiedFlashTimer !== undefined) return;
     isCopying = true;
     void onCopyAll()
