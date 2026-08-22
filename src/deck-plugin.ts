@@ -1,10 +1,9 @@
 import { DECK_PLUGIN_NAME } from "./constants.js";
-import { createDeckPanel } from "./deck-panel.js";
+import { createDeckBadge } from "./deck-badge.js";
 import {
   addDeckItem,
   clearDeck,
   getDeckItems,
-  removeDeckItem,
   subscribeDeck,
   type DeckCopyResult,
 } from "./deck-store.js";
@@ -36,18 +35,14 @@ export const createDeckPlugin = (): ReactGrabPlugin => ({
     },
   },
   setup: () => {
-    const panel = createDeckPanel({
-      onCopyAll: async () => (await copyDeckToClipboard()).didCopy,
-      onClear: clearDeck,
-      onRemove: removeDeckItem,
-    });
-    panel.update(getDeckItems());
-    const unsubscribe = subscribeDeck(panel.update);
+    const badge = createDeckBadge(async () => (await copyDeckToClipboard()).didCopy);
+    badge.update(getDeckItems().length);
+    const unsubscribe = subscribeDeck((items) => badge.update(items.length));
     return {
       cleanup: () => {
         // Items survive in the module store + sessionStorage; only UI unmounts.
         unsubscribe();
-        panel.destroy();
+        badge.destroy();
         return undefined;
       },
     };
