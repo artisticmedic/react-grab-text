@@ -44,6 +44,33 @@ test.describe("deck", () => {
       return textButton?.nextElementSibling?.getAttribute("data-react-grab-deck-ui") === "badge";
     });
     expect(isAfterTextButton).toBe(true);
+
+    // The injected element gets none of react-grab's shadow styles — the
+    // badge must resolve its own foreground with real contrast to the panel.
+    const contrast = await demo.page.evaluate(() => {
+      const host = document.querySelector("[data-react-grab]");
+      const root = host?.shadowRoot?.querySelector("[data-react-grab]");
+      const badgeElement = root?.querySelector('[data-react-grab-deck-ui="badge"]');
+      if (!badgeElement) return null;
+      const luminanceOf = (color: string): number => {
+        const channels = color.match(/[\d.]+/g)?.map(Number) ?? [0, 0, 0];
+        return 0.299 * (channels[0] ?? 0) + 0.587 * (channels[1] ?? 0) + 0.114 * (channels[2] ?? 0);
+      };
+      let ancestor = badgeElement.parentElement;
+      while (ancestor) {
+        const background = getComputedStyle(ancestor).backgroundColor;
+        const alpha = background.match(/[\d.]+/g)?.map(Number)[3] ?? 1;
+        if (background !== "rgba(0, 0, 0, 0)" && alpha > 0.1) {
+          return Math.abs(
+            luminanceOf(getComputedStyle(badgeElement).color) - luminanceOf(background),
+          );
+        }
+        ancestor = ancestor.parentElement;
+      }
+      return null;
+    });
+    expect(contrast).not.toBeNull();
+    expect(contrast!).toBeGreaterThan(60);
   });
 
   test("a copy grab is fenced on the clipboard and counts up the badge", async ({ demo }) => {

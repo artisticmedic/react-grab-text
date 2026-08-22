@@ -27,13 +27,17 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
   badge.setAttribute(DECK_UI_ATTRIBUTE, "badge");
   Object.assign(badge.style, {
     // Sized to the sibling action buttons so the bar never grows; hidden
-    // entirely while the deck is empty so it adds no width either.
+    // entirely while the deck is empty so it adds no width either. The
+    // vertical padding + negative margin pair widens the hit target to
+    // ~24px without changing the 14px layout box.
     display: "none",
     alignItems: "center",
     justifyContent: "center",
+    boxSizing: "content-box",
     height: "14px",
     flex: "none",
-    padding: "0",
+    padding: "5px 6px",
+    margin: "-5px 0",
     border: "none",
     background: "transparent",
     color: "inherit",
@@ -42,6 +46,26 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
     cursor: "pointer",
     userSelect: "none",
   });
+
+  // The toolbar's own glyphs are colored by react-grab's shadow stylesheet,
+  // which never applies to an injected element — inherited color computes to
+  // black on the dark panel (invisible). Resolve the panel's actual background
+  // and pick the readable foreground.
+  const applyColor = (): void => {
+    let ancestor = badge.parentElement;
+    while (ancestor) {
+      const background = getComputedStyle(ancestor).backgroundColor;
+      const channels = background.match(/[\d.]+/g)?.map(Number);
+      if (channels && channels.length >= 3 && (channels[3] ?? 1) > 0.1) {
+        const [r = 0, g = 0, b = 0] = channels;
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        badge.style.color = luminance < 128 ? "#fafafa" : "#171717";
+        return;
+      }
+      ancestor = ancestor.parentElement;
+    }
+    badge.style.color = "#fafafa";
+  };
 
   const render = (): void => {
     const isFlashing = copiedFlashTimer !== undefined;
@@ -74,7 +98,9 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
       .querySelector(TOOLBAR_HOST_SELECTOR)
       ?.shadowRoot?.querySelector(TOOLBAR_HOST_SELECTOR);
     const textButton = root?.querySelector(TEXT_ACTION_SELECTOR);
-    textButton?.insertAdjacentElement("afterend", badge);
+    if (!textButton) return;
+    textButton.insertAdjacentElement("afterend", badge);
+    applyColor();
   };
   attach();
   const reattachTimer = window.setInterval(attach, REATTACH_INTERVAL_MS);
