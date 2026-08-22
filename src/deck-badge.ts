@@ -13,9 +13,10 @@ const TOOLBAR_HOST_SELECTOR = "[data-react-grab]";
 const TEXT_ACTION_SELECTOR = '[data-react-grab-toolbar-action="text"]';
 const REATTACH_INTERVAL_MS = 500;
 
-// The deck's whole UI is one number sitting next to the Text "T" button in
-// react-grab's toolbar: an invisible fixed-size circle that shows the count
-// while items accumulate. Clicking it copies the entire deck and flushes it.
+// The deck's whole UI is one bare number sitting next to the Text "T" button
+// in react-grab's toolbar. Zero footprint while empty (display: none, so the
+// bar keeps its size); appears when items accumulate. Clicking it copies the
+// entire deck and flushes it.
 export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge => {
   let count = 0;
   let copiedFlashTimer: number | undefined;
@@ -25,40 +26,32 @@ export const createDeckBadge = (onCopyAll: () => Promise<boolean>): DeckBadge =>
   badge.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
   badge.setAttribute(DECK_UI_ATTRIBUTE, "badge");
   Object.assign(badge.style, {
-    // Same footprint as a toolbar action button; invisible until it has a number.
-    display: "inline-flex",
+    // Sized to the sibling action buttons so the bar never grows; hidden
+    // entirely while the deck is empty so it adds no width either.
+    display: "none",
     alignItems: "center",
     justifyContent: "center",
-    width: "24px",
-    height: "24px",
+    height: "14px",
     flex: "none",
     padding: "0",
     border: "none",
-    borderRadius: "999px",
     background: "transparent",
     color: "inherit",
     font: "inherit",
     fontVariantNumeric: "tabular-nums",
-    cursor: "default",
+    cursor: "pointer",
     userSelect: "none",
   });
 
   const render = (): void => {
     const isFlashing = copiedFlashTimer !== undefined;
     if (!isFlashing) badge.textContent = count > 0 ? String(count) : "";
-    badge.style.cursor = count > 0 || isFlashing ? "pointer" : "default";
+    badge.style.display = count > 0 || isFlashing ? "inline-flex" : "none";
     badge.setAttribute(
       "aria-label",
       count > 0 ? `Copy all ${count} deck items` : "Deck empty",
     );
   };
-
-  badge.addEventListener("mouseenter", () => {
-    if (count > 0) badge.style.background = "rgba(255, 255, 255, 0.08)";
-  });
-  badge.addEventListener("mouseleave", () => {
-    badge.style.background = "transparent";
-  });
   badge.addEventListener("click", () => {
     if (count === 0 || copiedFlashTimer !== undefined) return;
     void onCopyAll().then((didCopy) => {

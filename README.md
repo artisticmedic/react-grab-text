@@ -25,7 +25,7 @@ The edit stays applied on the page so you can read it in context; a refresh rese
 
 React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint: every successful grab (including its typed comment) also lands in a queue, and one action copies the whole queue as a single structured block.
 
-1. Grab elements as usual; add comments where wanted. Each grab still reaches the clipboard individually — and a count appears in the toolbar next to the Text action (an otherwise invisible circle).
+1. Grab elements as usual; add comments where wanted. Each grab still reaches the clipboard individually — and a bare count appears in the toolbar next to the Text action (no footprint at all while the deck is empty).
 2. Click the number: every item lands on the clipboard, numbered and separated by `--` lines, and the deck flushes itself. A failed clipboard write keeps the queue intact.
 
 ```

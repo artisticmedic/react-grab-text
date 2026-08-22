@@ -5,6 +5,16 @@ const TAGLINE = '[data-testid="tagline"]';
 
 const BADGE = '[data-react-grab-deck-ui="badge"]';
 
+// The toolbar animates, so Playwright's hit-testing click never sees it
+// stable — click programmatically, same pattern as fixtures' activateTextAction.
+const clickBadge = async (demo: DemoPageObject): Promise<void> => {
+  await demo.page.evaluate(() => {
+    const host = document.querySelector("[data-react-grab]");
+    const root = host?.shadowRoot?.querySelector("[data-react-grab]");
+    root?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
+  });
+};
+
 // A plain react-grab copy grab: activate select mode, click the target, then
 // wait for the deck badge to register the copy (the copy pipeline resolves
 // source info asynchronously before the hooks fire).
@@ -20,9 +30,13 @@ const copyGrab = async (
 };
 
 test.describe("deck", () => {
-  test("the badge sits next to the toolbar Text action and starts empty", async ({ demo }) => {
+  test("the badge sits next to the toolbar Text action and is hidden while empty", async ({
+    demo,
+  }) => {
     const badge = demo.page.locator(BADGE);
-    await expect(badge).toHaveText("");
+    // Injection waits for the toolbar to exist (500ms reattach interval).
+    await expect(badge).toBeAttached({ timeout: 10_000 });
+    await expect(badge).toBeHidden();
     const isAfterTextButton = await demo.page.evaluate(() => {
       const host = document.querySelector("[data-react-grab]");
       const root = host?.shadowRoot?.querySelector("[data-react-grab]");
@@ -49,7 +63,7 @@ test.describe("deck", () => {
     await copyGrab(demo, TAGLINE, 2);
     await demo.waitForActive(false);
 
-    await demo.page.locator(BADGE).click();
+    await clickBadge(demo);
 
     await expect(demo.page.locator(BADGE)).toHaveText("✓");
     const clipboard = await demo.readClipboard();
@@ -58,20 +72,16 @@ test.describe("deck", () => {
     expect(clipboard).toMatch(/\[<p data-testid="tagline">/);
     expect(clipboard).toMatch(/\n```$/);
 
-    // Copying flushes the queue; after the flash the badge goes blank.
-    await expect(demo.page.locator(BADGE)).toHaveText("", { timeout: 5_000 });
+    // Copying flushes the queue; after the flash the badge disappears.
+    await expect(demo.page.locator(BADGE)).toBeHidden({ timeout: 5_000 });
     expect(
       await demo.page.evaluate(() => sessionStorage.getItem("react-grab-deck")),
     ).toBe("[]");
   });
 
-  test("an empty badge ignores clicks and leaves the clipboard alone", async ({ demo }) => {
-    const sentinel = "deck-untouched";
-    await demo.writeClipboard(sentinel);
-
-    await demo.page.locator(BADGE).click();
-
-    expect(await demo.readClipboard()).toBe(sentinel);
+  test("an empty deck leaves no visible badge to click", async ({ demo }) => {
+    // Hidden = unclickable; nothing can reach the clipboard through it.
+    await expect(demo.page.locator(BADGE)).toBeHidden();
   });
 
   test("the deck survives a reload within the tab", async ({ demo }) => {
@@ -89,6 +99,6 @@ test.describe("deck", () => {
     await demo.waitForTextEdit();
 
     // The Text tool copies through its own path, not react-grab's pipeline.
-    await expect(demo.page.locator(BADGE)).toHaveText("");
+    await expect(demo.page.locator(BADGE)).toBeHidden();
   });
 });
