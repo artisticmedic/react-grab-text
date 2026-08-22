@@ -2,8 +2,8 @@ import { DECK_PLUGIN_NAME } from "./constants.js";
 import { createDeckBadge } from "./deck-badge.js";
 import {
   addDeckItem,
-  clearDeck,
   getDeckItems,
+  removeDeckItems,
   subscribeDeck,
   type DeckCopyResult,
 } from "./deck-store.js";
@@ -15,8 +15,10 @@ export const copyDeckToClipboard = async (): Promise<DeckCopyResult> => {
   const items = getDeckItems();
   const output = formatDeck(items);
   const didCopy = items.length > 0 && (await copyTextToClipboard(output));
-  // Copying is what flushes the queue; a failed copy keeps it intact.
-  if (didCopy) clearDeck();
+  // Copying is what flushes the queue; a failed copy keeps it intact. Only the
+  // copied snapshot is flushed — a grab landing during the clipboard await
+  // survives for the next copy.
+  if (didCopy) removeDeckItems(items.map((item) => item.id));
   const result: DeckCopyResult = { itemCount: items.length, output, didCopy };
   window.dispatchEvent(new CustomEvent("react-grab-deck:copy", { detail: result }));
   return result;

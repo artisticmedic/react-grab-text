@@ -3,7 +3,6 @@ import { DECK_MAX_ITEMS, DECK_STORAGE_KEY } from "./constants.js";
 export interface DeckItem {
   id: string;
   content: string;
-  addedAt: number;
 }
 
 export interface DeckCopyResult {
@@ -31,8 +30,7 @@ const isDeckItem = (value: unknown): value is DeckItem =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as DeckItem).id === "string" &&
-  typeof (value as DeckItem).content === "string" &&
-  typeof (value as DeckItem).addedAt === "number";
+  typeof (value as DeckItem).content === "string";
 
 // sessionStorage, not localStorage: the queue should survive reloads and
 // same-tab navigation during a review pass, but a fresh tab starts empty.
@@ -78,15 +76,20 @@ export const addDeckItem = (content: string): DeckItem | null => {
   loadOnce();
   const trimmed = content.trim();
   if (!trimmed) return null;
-  const item: DeckItem = { id: createItemId(), content: trimmed, addedAt: Date.now() };
+  const item: DeckItem = { id: createItemId(), content: trimmed };
   items = [...items, item].slice(-DECK_MAX_ITEMS);
   notify();
   return item;
 };
 
 export const removeDeckItem = (id: string): void => {
+  removeDeckItems([id]);
+};
+
+export const removeDeckItems = (ids: readonly string[]): void => {
   loadOnce();
-  const next = items.filter((item) => item.id !== id);
+  const removed = new Set(ids);
+  const next = items.filter((item) => !removed.has(item.id));
   if (next.length === items.length) return;
   items = next;
   notify();

@@ -1,17 +1,36 @@
-import { expect, test, type DemoPageObject } from "./fixtures.js";
+import { REACT_GRAB_ATTRIBUTE, expect, test, type DemoPageObject } from "./fixtures.js";
 
 const HEADLINE = '[data-testid="headline"]';
 const TAGLINE = '[data-testid="tagline"]';
 
 const BADGE = '[data-react-grab-deck-ui="badge"]';
 
+// One page-side traversal for everything that reaches into react-grab's
+// shadow root, parameterized on the fixtures' attribute like the fixtures'
+// own helpers.
+const inToolbar = async <T>(
+  demo: DemoPageObject,
+  fn: (root: Element, attributeName: string) => T,
+): Promise<T> =>
+  demo.page.evaluate(
+    ({ attributeName, body }) => {
+      const host = document.querySelector(`[${attributeName}]`);
+      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+      if (!root) throw new Error("react-grab toolbar root not found");
+      // eslint-disable-next-line no-new-func
+      return new Function("root", "attributeName", `return (${body})(root, attributeName)`)(
+        root,
+        attributeName,
+      ) as T;
+    },
+    { attributeName: REACT_GRAB_ATTRIBUTE, body: fn.toString() },
+  );
+
 // The toolbar animates, so Playwright's hit-testing click never sees it
 // stable — click programmatically, same pattern as fixtures' activateTextAction.
 const clickBadge = async (demo: DemoPageObject): Promise<void> => {
-  await demo.page.evaluate(() => {
-    const host = document.querySelector("[data-react-grab]");
-    const root = host?.shadowRoot?.querySelector("[data-react-grab]");
-    root?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
+  await inToolbar(demo, (root) => {
+    root.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
   });
 };
 
@@ -37,40 +56,35 @@ test.describe("deck", () => {
     // Injection waits for the toolbar to exist (500ms reattach interval).
     await expect(badge).toBeAttached({ timeout: 10_000 });
     await expect(badge).toBeHidden();
-    const isAfterTextButton = await demo.page.evaluate(() => {
-      const host = document.querySelector("[data-react-grab]");
-      const root = host?.shadowRoot?.querySelector("[data-react-grab]");
-      const textButton = root?.querySelector('[data-react-grab-toolbar-action="text"]');
+    const isAfterTextButton = await inToolbar(demo, (root) => {
+      const textButton = root.querySelector('[data-react-grab-toolbar-action="text"]');
       return textButton?.nextElementSibling?.getAttribute("data-react-grab-deck-ui") === "badge";
     });
     expect(isAfterTextButton).toBe(true);
 
-    // The injected element gets none of react-grab's shadow styles — the
-    // badge must resolve its own foreground with real contrast to the panel.
-    const contrast = await demo.page.evaluate(() => {
-      const host = document.querySelector("[data-react-grab]");
-      const root = host?.shadowRoot?.querySelector("[data-react-grab]");
-      const badgeElement = root?.querySelector('[data-react-grab-deck-ui="badge"]');
+    // The injected element gets none of react-grab's shadow styles — its
+    // color must resolve to react-grab's own theme foreground token.
+    const colors = await inToolbar(demo, (root) => {
+      const badgeElement = root.querySelector('[data-react-grab-deck-ui="badge"]');
       if (!badgeElement) return null;
-      const luminanceOf = (color: string): number => {
-        const channels = color.match(/[\d.]+/g)?.map(Number) ?? [0, 0, 0];
-        return 0.299 * (channels[0] ?? 0) + 0.587 * (channels[1] ?? 0) + 0.114 * (channels[2] ?? 0);
+      return {
+        badge: getComputedStyle(badgeElement).color,
+        theme: getComputedStyle(badgeElement).getPropertyValue("--rg-text-primary").trim(),
       };
-      let ancestor = badgeElement.parentElement;
-      while (ancestor) {
-        const background = getComputedStyle(ancestor).backgroundColor;
-        const alpha = background.match(/[\d.]+/g)?.map(Number)[3] ?? 1;
-        if (background !== "rgba(0, 0, 0, 0)" && alpha > 0.1) {
-          return Math.abs(
-            luminanceOf(getComputedStyle(badgeElement).color) - luminanceOf(background),
-          );
-        }
-        ancestor = ancestor.parentElement;
-      }
-      return null;
     });
-    expect(contrast).not.toBeNull();
-    expect(contrast!).toBeGreaterThan(60);
+    expect(colors).not.toBeNull();
+    expect(colors!.theme).not.toBe("");
+    // Resolve the token through a scratch element so both sides compare in
+    // the same computed rgb() form.
+    const themeAsRgb = await demo.page.evaluate((themeColor) => {
+      const probe = document.createElement("span");
+      probe.style.color = themeColor;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    }, colors!.theme);
+    expect(colors!.badge).toBe(themeAsRgb);
   });
 
   test("a copy grab is fenced on the clipboard and counts up the badge", async ({ demo }) => {
@@ -92,7 +106,10 @@ test.describe("deck", () => {
 
     await clickBadge(demo);
 
+    // The flash must be visible, not just present — the flush drops the count
+    // to 0 mid-copy and the badge must not hide before the checkmark shows.
     await expect(demo.page.locator(BADGE)).toHaveText("✓");
+    await expect(demo.page.locator(BADGE)).toBeVisible();
     const clipboard = await demo.readClipboard();
     expect(clipboard).toMatch(/^1\.\n```\n\[<h1 data-testid="headline">/);
     expect(clipboard).toContain("\n--\n2.\n```\n");

@@ -8,6 +8,7 @@ export {
   clearDeck,
   getDeckItems,
   removeDeckItem,
+  removeDeckItems,
   subscribeDeck,
 } from "./deck-store.js";
 export { fencePayload, formatDeck } from "./format-deck.js";
