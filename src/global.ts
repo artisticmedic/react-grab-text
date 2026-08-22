@@ -1,3 +1,4 @@
-import { registerTextPlugin } from "./register.js";
+import { registerDeckPlugin, registerTextPlugin } from "./register.js";
 
 registerTextPlugin();
+registerDeckPlugin();

@@ -1,6 +1,6 @@
 # react-grab-text
 
-Text tool for [React Grab](https://github.com/aidenybai/react-grab). Click text on your running app, edit it inline, and copy the edit out as an agent-ready payload with source context.
+Text and Deck tools for [React Grab](https://github.com/aidenybai/react-grab). Click text on your running app, edit it inline, and copy the edit out as an agent-ready payload with source context. Grabs accumulate in a deck that copies out as one numbered, separated block.
 
 React Grab's palette selects elements and copies context *about* them. This plugin adds the missing copyediting move: change the words in place, see the edit live on the page, and hand the before/after — with component name and file location — straight to a coding agent.
 
@@ -21,6 +21,31 @@ AFTER: "Welcome home"
 
 The edit stays applied on the page so you can read it in context; a refresh resets it. Paste the payload into your agent to make it permanent.
 
+## Deck
+
+React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint: every successful grab (including its typed comment) also lands in a queue, and one action copies the whole queue as a single structured block.
+
+1. Grab elements as usual; add comments where wanted. Each grab still reaches the clipboard individually — and a pill in the bottom-left corner counts the deck.
+2. Click the pill to review the queue: one row per grab, `✕` removes a row.
+3. **Copy all** writes every item to the clipboard, numbered and separated by `--` lines, then clears the deck. **Clear** empties it without copying.
+
+```
+1.
+this label is misleading
+```
+[<button class="cta">Start</button> in Hero (at src/components/Hero.tsx:14)]
+```
+--
+2.
+```
+[<h1 data-testid="headline">Welcome</h1> in Header (at src/components/Header.tsx:8)]
+```
+```
+
+Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text-tool edits copy through their own path and never enter the deck.
+
+A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
+
 ## Install
 
 Script tag, next to React Grab's own (dev only):
@@ -34,12 +59,13 @@ Or as a module, after React Grab is loaded:
 
 ```ts
 import "react-grab";
-import { registerTextPlugin } from "react-grab-text";
+import { registerDeckPlugin, registerTextPlugin } from "react-grab-text";
 
 registerTextPlugin();
+registerDeckPlugin();
 ```
 
-Registration is race-free in both directions: if React Grab isn't initialized yet, the plugin waits for its `react-grab:init` event.
+Registration is race-free in both directions: if React Grab isn't initialized yet, the plugins wait for its `react-grab:init` event. The script-tag build registers both tools; module consumers register each independently.
 
 ## Compatibility
 

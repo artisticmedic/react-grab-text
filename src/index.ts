@@ -1,7 +1,17 @@
 export { createTextPlugin } from "./text-plugin.js";
-export { registerTextPlugin } from "./register.js";
+export { registerDeckPlugin, registerTextPlugin } from "./register.js";
 export { getActiveEditSession, startEditSession } from "./edit-session.js";
 export { buildEditPayload } from "./build-edit-payload.js";
+export { copyDeckToClipboard, createDeckPlugin } from "./deck-plugin.js";
+export {
+  addDeckItem,
+  clearDeck,
+  getDeckItems,
+  removeDeckItem,
+  subscribeDeck,
+} from "./deck-store.js";
+export { fencePayload, formatDeck } from "./format-deck.js";
+export type { DeckCopyResult, DeckItem } from "./deck-store.js";
 export type {
   EditResult,
   EditSessionHandle,

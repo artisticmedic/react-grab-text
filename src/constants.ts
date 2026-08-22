@@ -35,3 +35,10 @@ export const NON_EDITABLE_TAGS = new Set([
   "HTML",
   "BODY",
 ]);
+
+export const DECK_PLUGIN_NAME = "deck";
+export const DECK_UI_ATTRIBUTE = "data-react-grab-deck-ui";
+export const DECK_STORAGE_KEY = "react-grab-deck";
+export const DECK_MAX_ITEMS = 50;
+export const DECK_ITEM_SEPARATOR = "\n--\n";
+export const DECK_COPIED_FLASH_DURATION_MS = 1600;

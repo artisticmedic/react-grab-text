@@ -1,0 +1,108 @@
+import { DECK_MAX_ITEMS, DECK_STORAGE_KEY } from "./constants.js";
+
+export interface DeckItem {
+  id: string;
+  content: string;
+  addedAt: number;
+}
+
+export interface DeckCopyResult {
+  itemCount: number;
+  output: string;
+  didCopy: boolean;
+}
+
+declare global {
+  interface WindowEventMap {
+    "react-grab-deck:change": CustomEvent<{ items: DeckItem[] }>;
+    "react-grab-deck:copy": CustomEvent<DeckCopyResult>;
+  }
+}
+
+type DeckListener = (items: DeckItem[]) => void;
+
+// Module-level so the queue survives plugin unregister/re-register (Fast
+// Refresh re-runs setup; the deck must not lose items over it).
+let items: DeckItem[] = [];
+const listeners = new Set<DeckListener>();
+let didLoad = false;
+
+const isDeckItem = (value: unknown): value is DeckItem =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as DeckItem).id === "string" &&
+  typeof (value as DeckItem).content === "string" &&
+  typeof (value as DeckItem).addedAt === "number";
+
+// sessionStorage, not localStorage: the queue should survive reloads and
+// same-tab navigation during a review pass, but a fresh tab starts empty.
+const loadOnce = (): void => {
+  if (didLoad) return;
+  didLoad = true;
+  try {
+    const raw = window.sessionStorage.getItem(DECK_STORAGE_KEY);
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) items = parsed.filter(isDeckItem).slice(-DECK_MAX_ITEMS);
+  } catch {
+    // Storage-less or corrupted state: start empty.
+  }
+};
+
+const persist = (): void => {
+  try {
+    window.sessionStorage.setItem(DECK_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Quota or storage-less context: the in-memory queue still works.
+  }
+};
+
+const notify = (): void => {
+  persist();
+  const snapshot = getDeckItems();
+  for (const listener of listeners) listener(snapshot);
+  window.dispatchEvent(new CustomEvent("react-grab-deck:change", { detail: { items: snapshot } }));
+};
+
+const createItemId = (): string =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+export const getDeckItems = (): DeckItem[] => {
+  loadOnce();
+  return [...items];
+};
+
+export const addDeckItem = (content: string): DeckItem | null => {
+  loadOnce();
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  const item: DeckItem = { id: createItemId(), content: trimmed, addedAt: Date.now() };
+  items = [...items, item].slice(-DECK_MAX_ITEMS);
+  notify();
+  return item;
+};
+
+export const removeDeckItem = (id: string): void => {
+  loadOnce();
+  const next = items.filter((item) => item.id !== id);
+  if (next.length === items.length) return;
+  items = next;
+  notify();
+};
+
+export const clearDeck = (): void => {
+  loadOnce();
+  if (items.length === 0) return;
+  items = [];
+  notify();
+};
+
+export const subscribeDeck = (listener: DeckListener): (() => void) => {
+  loadOnce();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};

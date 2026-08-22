@@ -1,7 +1,7 @@
 {
   "name": "react-grab-text",
-  "version": "0.1.0",
-  "description": "Text tool for React Grab — click text, edit it inline, copy the edit out with source context",
+  "version": "0.2.0",
+  "description": "Text and Deck tools for React Grab \u2014 edit text inline and batch grabs into one structured copy",
   "keywords": [
     "react-grab",
     "react-grab-plugin",

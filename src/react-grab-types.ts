@@ -38,6 +38,8 @@ export interface ReactGrabContextMenuAction {
 export interface ReactGrabPluginHooks {
   onDragStart?: (startX: number, startY: number) => void | Promise<void>;
   onStateChange?: (state: ReactGrabState) => void | Promise<void>;
+  transformCopyContent?: (content: string, elements: Element[]) => string | Promise<string>;
+  onCopySuccess?: (elements: Element[], content: string) => void | Promise<void>;
 }
 
 export interface ReactGrabPluginConfig {

@@ -1,26 +1,35 @@
-import type { ReactGrabApi } from "./react-grab-types.js";
+import { createDeckPlugin } from "./deck-plugin.js";
+import type { ReactGrabApi, ReactGrabPlugin } from "./react-grab-types.js";
 import { createTextPlugin } from "./text-plugin.js";
 
 const getReactGrabApi = (): ReactGrabApi | undefined =>
   (window as Window & { __REACT_GRAB__?: ReactGrabApi }).__REACT_GRAB__;
 
-const tryRegister = (): boolean => {
+const tryRegister = (createPlugin: () => ReactGrabPlugin): boolean => {
   const api = getReactGrabApi();
   if (!api || typeof api.registerPlugin !== "function") return false;
   try {
     // registerPlugin re-throws PluginSetupError into this call frame.
-    api.registerPlugin(createTextPlugin());
+    api.registerPlugin(createPlugin());
   } catch (error) {
     console.warn("[react-grab-text] Failed to register plugin:", error);
   }
   return true;
 };
 
-export const registerTextPlugin = (): void => {
+const registerWhenReady = (createPlugin: () => ReactGrabPlugin): void => {
   if (typeof window === "undefined") return;
-  if (tryRegister()) return;
+  if (tryRegister(createPlugin)) return;
   const handleInit = (): void => {
-    tryRegister();
+    tryRegister(createPlugin);
   };
   window.addEventListener("react-grab:init", handleInit, { once: true });
+};
+
+export const registerTextPlugin = (): void => {
+  registerWhenReady(createTextPlugin);
+};
+
+export const registerDeckPlugin = (): void => {
+  registerWhenReady(createDeckPlugin);
 };
