@@ -131,6 +131,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
 
   const renderDeckAffordance = (): void => {
     deckAffordance.setBatchActive(batchMode);
+    deckPanel.setBatchActive(batchMode);
     deckAffordance.setFace(getAffordanceFace(), count);
     const label = affordanceLabel();
     deckButton.title = label;
@@ -159,6 +160,9 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     },
     onUpdateItem: (id: string, content: string) => {
       updateDeckItem(id, content);
+    },
+    onToggleMode: () => {
+      toggleDeckMode();
     },
   };
 

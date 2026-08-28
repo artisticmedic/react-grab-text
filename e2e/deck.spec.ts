@@ -10,6 +10,7 @@ const DECK_STACK = `${DECK_TOGGLE} [data-react-grab-deck-face="stack"]`;
 const PANEL_TOGGLE = '[data-react-grab-deck-ui="panel-toggle"]';
 const PANEL = '[data-react-grab-deck-ui="panel"]';
 const DELETE_ITEM = '[data-react-grab-deck-ui="delete-item"]';
+const PANEL_MODE_TOGGLE = '[data-react-grab-deck-ui="panel-mode-toggle"]';
 
 const clickDeckAffordance = async (demo: DemoPageObject): Promise<void> => {
   await demo.page.evaluate((attributeName) => {
@@ -200,6 +201,33 @@ test.describe("deck", () => {
 
     await expectDeckCount(demo, "1");
     await expect(demo.page.locator(DELETE_ITEM)).toHaveCount(1);
+  });
+
+  test("batch mode stays switchable from the panel once the deck has items", async ({
+    demo,
+  }) => {
+    // The toolbar affordance becomes copy-all at the first queued item, so the
+    // panel is the only way back to single mode without emptying the deck.
+    await copyGrab(demo, HEADLINE, 1);
+    await clickPanelToggle(demo);
+
+    const modeButton = demo.page.locator(PANEL_MODE_TOGGLE);
+    await expect(modeButton).toHaveText("Batch on");
+    await expect(modeButton).toHaveAttribute("aria-pressed", "true");
+
+    await modeButton.click();
+    await expect(modeButton).toHaveText("Batch off");
+    await expect(demo.page.locator(DECK_TOGGLE)).toHaveAttribute("aria-pressed", "false");
+
+    // Switching mode leaves the queue alone; it only stops new grabs joining it.
+    await expectDeckCount(demo, "1");
+    const copied = await demo.page.evaluate(async (sel) => {
+      const element = document.querySelector(sel);
+      if (!element) return false;
+      return (await window.__REACT_GRAB__?.copyElement(element)) ?? false;
+    }, TAGLINE);
+    expect(copied).toBe(true);
+    await expectDeckCount(demo, "1");
   });
 
   test("the deck panel closes on an outside click", async ({ demo }) => {

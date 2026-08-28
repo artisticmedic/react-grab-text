@@ -29,7 +29,8 @@ React Grab's native flow replaces the clipboard on every grab, so a review pass 
 
 1. Turn batch mode on; grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
 2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
-3. Click ▾ to open the deck panel, remove individual items with ×, or clear all.
+3. Click ▾ to open the deck panel, edit items in place, remove individual items with ×, or clear all.
+4. The panel footer holds the batch-mode switch. The toolbar affordance becomes copy-all once anything is queued, so the panel is where you turn batch mode off without first emptying the deck. Switching to single mode keeps the queue — it only stops new grabs joining it.
 
 ```
 1.

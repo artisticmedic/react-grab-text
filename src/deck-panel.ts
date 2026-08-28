@@ -74,6 +74,7 @@ type PanelHandlers = {
   onClearAll: () => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, content: string) => void;
+  onToggleMode: () => void;
 };
 
 const createItemField = (
@@ -212,6 +213,7 @@ const createItemRow = (index: number, item: DeckItem, handlers: PanelHandlers): 
 export interface DeckPanelView {
   panel: HTMLDivElement;
   hasFocusedField: () => boolean;
+  setBatchActive: (active: boolean) => void;
   sync: (items: readonly DeckItem[], handlers: PanelHandlers) => void;
 }
 
@@ -253,6 +255,16 @@ export const createDeckPanelView = (): DeckPanelView => {
   separator.textContent = "·";
   separator.setAttribute("aria-hidden", "true");
 
+  // The toolbar affordance turns into copy-all as soon as an item is queued, so
+  // it can no longer double as the mode toggle. The panel is reachable in exactly
+  // that state, which makes the footer the one place batch mode stays switchable.
+  const modeButton = createIconButton("Turn batch mode off", "panel-mode-toggle", "Batch on", {
+    fontSize: "11px",
+    minWidth: "0",
+    minHeight: "24px",
+    padding: "4px 0",
+  });
+
   const clearButton = createIconButton("Clear all deck items", "clear-all", "Clear", {
     fontSize: "11px",
     minWidth: "0",
@@ -279,6 +291,10 @@ export const createDeckPanelView = (): DeckPanelView => {
 
   let footerHandlers: PanelHandlers | null = null;
 
+  modeButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    footerHandlers?.onToggleMode();
+  });
   clearButton.addEventListener("click", (event) => {
     event.stopPropagation();
     footerHandlers?.onClearAll();
@@ -288,12 +304,34 @@ export const createDeckPanelView = (): DeckPanelView => {
     footerHandlers?.onCopyAll();
   });
 
-  meta.append(countLabel, separator, clearButton);
+  const modeSeparator = separator.cloneNode(true) as HTMLSpanElement;
+
+  meta.append(countLabel, separator, modeButton, modeSeparator, clearButton);
   footer.append(meta, copyButton);
   panel.append(scroll, footer);
 
   const getRowField = (row: Element): HTMLTextAreaElement | null =>
     row.querySelector(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
+
+  // Colour carries the state, so the hover handlers createIconButton installed
+  // have to be overridden or they would repaint it back to idle on mouseleave.
+  let batchActive = true;
+  const paintMode = (): void => {
+    modeButton.style.color = batchActive ? t.text : t.textMuted;
+  };
+  const setBatchActive = (active: boolean): void => {
+    batchActive = active;
+    modeButton.textContent = active ? "Batch on" : "Batch off";
+    modeButton.title = active ? "Turn batch mode off" : "Turn batch mode on";
+    modeButton.setAttribute("aria-label", modeButton.title);
+    modeButton.setAttribute("aria-pressed", String(active));
+    paintMode();
+  };
+  modeButton.addEventListener("mouseenter", () => {
+    modeButton.style.color = t.text;
+  });
+  modeButton.addEventListener("mouseleave", paintMode);
+  setBatchActive(true);
 
   const hasFocusedField = (): boolean =>
     scroll.contains(document.activeElement) &&
@@ -350,5 +388,5 @@ export const createDeckPanelView = (): DeckPanelView => {
     panel.style.display = "flex";
   };
 
-  return { panel, hasFocusedField, sync };
+  return { panel, hasFocusedField, setBatchActive, sync };
 };
