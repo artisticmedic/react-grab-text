@@ -47,7 +47,9 @@ const Harness = () => {
     window.history.replaceState(null, "", url);
   }, []);
 
-  const active = VARIANTS[variantIndex];
+  // noUncheckedIndexedAccess: readVariantIndex/setVariant both clamp to range,
+  // but the index signature can't know that.
+  const active = VARIANTS[variantIndex] ?? VARIANTS[0];
 
   return (
     <>

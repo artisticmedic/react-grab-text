@@ -11,9 +11,11 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // node_modules, one in dist), so serve them raw and untransformed at stable
 // URLs rather than putting machine-specific /@fs/ paths in the HTML.
 const IIFE_BUNDLES: Record<string, string> = {
-  // Flightcast fork (0.1.49 + toolbar plugin slots + Style pill). The npm
-  // package is 0.2.0 and drops the palette toolbar — wrong surface for this demo.
-  "/vendor/react-grab.iife.js": ".serve/react-grab.global.js",
+  // Checked into vendor/ rather than read from node_modules: the demo needs the
+  // fork build (0.1.49 + a toolbar button per registered plugin action + the
+  // Style pill), and npm's 0.2.0 drops the palette toolbar the Deck attaches to.
+  // Committing it is what lets a fresh clone — and CI — run the suite at all.
+  "/vendor/react-grab.iife.js": "vendor/react-grab.global.js",
   "/vendor/react-grab-text.iife.js": "dist/global.global.js",
 };
 
