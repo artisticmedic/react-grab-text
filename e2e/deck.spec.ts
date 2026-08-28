@@ -27,6 +27,13 @@ const enableBatchMode = async (demo: DemoPageObject): Promise<void> => {
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 };
 
+const disableBatchMode = async (demo: DemoPageObject): Promise<void> => {
+  const toggle = demo.page.locator(DECK_TOGGLE);
+  if ((await toggle.getAttribute("aria-pressed")) === "false") return;
+  await clickDeckAffordance(demo);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+};
+
 const clickPanelToggle = async (demo: DemoPageObject): Promise<void> => {
   await demo.page.evaluate((attributeName) => {
     const host = document.querySelector(`[${attributeName}]`);
@@ -71,6 +78,9 @@ test.describe("deck", () => {
   test("the deck controls sit next to the toolbar Text action", async ({ demo }) => {
     const controls = demo.page.locator('[data-react-grab-deck-ui="controls"]');
     await expect(controls).toBeAttached({ timeout: 10_000 });
+    // Colour parity is an at-rest claim: batch mode is on by default, which
+    // paints the deck icon active on purpose.
+    await disableBatchMode(demo);
     await expectDeckStackVisible(demo);
     await expect(demo.page.locator(DECK_TOGGLE)).toBeVisible();
     const placement = await demo.page.evaluate((attributeName) => {
@@ -90,22 +100,24 @@ test.describe("deck", () => {
     expect(placement.sharesToolbarRow).toBe(true);
     expect(placement.notInsideTextWrapper).toBe(true);
 
-    const colors = await demo.page.evaluate((attributeName) => {
-      const host = document.querySelector(`[${attributeName}]`);
-      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
-      const deckIcon = root?.querySelector('[data-react-grab-deck-ui="mode-toggle"] svg');
-      const textIcon = root?.querySelector('[data-react-grab-toolbar-action="text"] svg');
-      if (!deckIcon || !textIcon) return null;
-      return {
-        deck: getComputedStyle(deckIcon).color,
-        text: getComputedStyle(textIcon).color,
-      };
-    }, REACT_GRAB_ATTRIBUTE);
-    expect(colors).not.toBeNull();
-    expect(colors!.deck).toBe(colors!.text);
+    // Poll: the icon colour is transitioned, so leaving batch mode animates the
+    // deck icon down to the idle token rather than snapping to it.
+    await expect
+      .poll(async () =>
+        demo.page.evaluate((attributeName) => {
+          const host = document.querySelector(`[${attributeName}]`);
+          const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+          const deckIcon = root?.querySelector('[data-react-grab-deck-ui="mode-toggle"] svg');
+          const textIcon = root?.querySelector('[data-react-grab-toolbar-action="text"] svg');
+          if (!deckIcon || !textIcon) return null;
+          return getComputedStyle(deckIcon).color === getComputedStyle(textIcon).color;
+        }, REACT_GRAB_ATTRIBUTE),
+      )
+      .toBe(true);
   });
 
   test("single mode keeps copy grabs off the deck", async ({ demo }) => {
+    await disableBatchMode(demo);
     await demo.activate();
     await demo.hoverUntilTargeted(HEADLINE);
     await demo.clickTarget(HEADLINE);
@@ -167,6 +179,7 @@ test.describe("deck", () => {
   });
 
   test("a text edit commit stays off the deck in single mode", async ({ demo }) => {
+    await disableBatchMode(demo);
     await demo.startEditing(HEADLINE);
     await demo.selectAllInEditor();
     await demo.page.keyboard.type("A different headline");

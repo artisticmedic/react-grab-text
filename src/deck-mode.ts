@@ -4,7 +4,10 @@ export type DeckMode = "single" | "batch";
 
 type DeckModeListener = (mode: DeckMode) => void;
 
-let mode: DeckMode = "single";
+// Batch is the default: collecting is the point of the deck, and a review pass
+// that silently dropped the first few grabs would be worse than one extra click
+// to turn it off. Single mode stays one click away on the empty affordance.
+let mode: DeckMode = "batch";
 const listeners = new Set<DeckModeListener>();
 let didLoad = false;
 

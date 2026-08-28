@@ -25,9 +25,9 @@ The edit stays applied on the page so you can read it in context; a refresh rese
 
 React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint in **batch mode**: every successful grab (copy or text edit) also lands in a queue, and one action copies the whole queue as a single structured block.
 
-**Single mode** (default) sends each grab to the clipboard only — the deck stays empty and invisible. Toggle **batch mode** with the ◫ button next to the Text action when you want to accumulate grabs for a review pass.
+**Batch mode is on by default** — collecting is the point of the deck, and a review pass that silently dropped its first few grabs would cost more than one click to turn it off. **Single mode** sends each grab to the clipboard only and keeps the deck empty and invisible; switch with the ◫ button next to the Text action.
 
-1. Turn batch mode on; grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
+1. Grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
 2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
 3. Click ▾ to open the deck panel, edit items in place, remove individual items with ×, or clear all.
 4. The panel footer holds the batch-mode switch. The toolbar affordance becomes copy-all once anything is queued, so the panel is where you turn batch mode off without first emptying the deck. Switching to single mode keeps the queue — it only stops new grabs joining it.
