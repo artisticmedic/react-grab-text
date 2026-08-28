@@ -11,7 +11,9 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // node_modules, one in dist), so serve them raw and untransformed at stable
 // URLs rather than putting machine-specific /@fs/ paths in the HTML.
 const IIFE_BUNDLES: Record<string, string> = {
-  "/vendor/react-grab.iife.js": "node_modules/react-grab/dist/index.global.js",
+  // Flightcast fork (0.1.49 + toolbar plugin slots + Style pill). The npm
+  // package is 0.2.0 and drops the palette toolbar — wrong surface for this demo.
+  "/vendor/react-grab.iife.js": ".serve/react-grab.global.js",
   "/vendor/react-grab-text.iife.js": "dist/global.global.js",
 };
 
@@ -48,4 +50,5 @@ export default defineConfig({
     // sources directly; the repo root has to be readable from the demo root.
     fs: { allow: [".."] },
   },
+  appType: "mpa",
 });

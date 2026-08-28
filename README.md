@@ -23,10 +23,13 @@ The edit stays applied on the page so you can read it in context; a refresh rese
 
 ## Deck
 
-React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint: every successful grab (including its typed comment) also lands in a queue, and one action copies the whole queue as a single structured block.
+React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint in **batch mode**: every successful grab (copy or text edit) also lands in a queue, and one action copies the whole queue as a single structured block.
 
-1. Grab elements as usual; add comments where wanted. Each grab still reaches the clipboard individually — and a bare count appears in the toolbar next to the Text action (no footprint at all while the deck is empty).
-2. Click the number: every item lands on the clipboard, numbered and separated by `--` lines, and the deck flushes itself. A failed clipboard write keeps the queue intact.
+**Single mode** (default) sends each grab to the clipboard only — the deck stays empty and invisible. Toggle **batch mode** with the ◫ button next to the Text action when you want to accumulate grabs for a review pass.
+
+1. Turn batch mode on; grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
+2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
+3. Click ▾ to open the deck panel, remove individual items with ×, or clear all.
 
 ```
 1.
@@ -41,7 +44,7 @@ this label is misleading
 ```
 ```
 
-Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text-tool edits copy through their own path and never enter the deck.
+Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text edits queue in batch mode alongside copy grabs.
 
 A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
 

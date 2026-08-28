@@ -1,4 +1,3 @@
-import "react-grab";
 import { createRoot } from "react-dom/client";
 import { registerDeckPlugin, registerTextPlugin } from "../../src/index.js";
 import { App } from "./app.js";

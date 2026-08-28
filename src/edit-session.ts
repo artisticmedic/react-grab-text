@@ -13,6 +13,7 @@ import type {
   Position,
 } from "./types.js";
 import { buildEditPayload } from "./build-edit-payload.js";
+import { queueDeckItemIfBatch } from "./deck-queue.js";
 import { buildElementPreview } from "./utils/build-element-preview.js";
 import { caretRangeFromPoint } from "./utils/caret-range-from-point.js";
 import { copyTextToClipboard } from "./utils/copy-text-to-clipboard.js";
@@ -328,6 +329,8 @@ export const startEditSession = (options: EditSessionOptions): EditSessionHandle
     });
     if (element.isConnected) flashElement(element);
     const didCopy = await copyTextToClipboard(payload);
+
+    if (didCopy) queueDeckItemIfBatch(payload);
 
     if (!isQuiet) {
       showStatusPill((pill) => {

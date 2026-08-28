@@ -96,6 +96,17 @@ export const removeDeckItems = (ids: readonly string[]): void => {
   notify();
 };
 
+export const updateDeckItem = (id: string, content: string): void => {
+  loadOnce();
+  const trimmed = content.trim();
+  if (!trimmed) return;
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) return;
+  if (items[index]!.content === trimmed) return;
+  items = items.map((item) => (item.id === id ? { ...item, content: trimmed } : item));
+  notify();
+};
+
 export const clearDeck = (): void => {
   loadOnce();
   if (items.length === 0) return;
