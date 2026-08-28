@@ -13,6 +13,14 @@
   "author": {
     "name": "Tim Gailey"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/artisticmedic/react-grab-text.git"
+  },
+  "homepage": "https://github.com/artisticmedic/react-grab-text#readme",
+  "bugs": {
+    "url": "https://github.com/artisticmedic/react-grab-text/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
