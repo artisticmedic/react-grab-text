@@ -14,7 +14,14 @@ import {
   DECK_CONTROLS_GAP_PX,
 } from "./deck-toolbar-button.js";
 import { subscribeDeckMode, toggleDeckMode } from "./deck-mode.js";
-import { clearDeck, getDeckItems, removeDeckItems, subscribeDeck, type DeckItem } from "./deck-store.js";
+import {
+  clearDeck,
+  getDeckItems,
+  removeDeckItems,
+  subscribeDeck,
+  updateDeckItem,
+  type DeckItem,
+} from "./deck-store.js";
 
 export interface DeckUi {
   update: (count: number) => void;
@@ -140,24 +147,30 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     panelToggle.setAttribute("aria-label", panelOpen ? "Close deck panel" : "Review deck items");
   };
 
+  const panelHandlers = {
+    onCopyAll: () => {
+      void onCopyAll();
+    },
+    onClearAll: () => {
+      clearDeck();
+    },
+    onRemoveItem: (id: string) => {
+      removeDeckItems([id]);
+    },
+    onUpdateItem: (id: string, content: string) => {
+      updateDeckItem(id, content);
+    },
+  };
+
   const renderPanelItems = (items: readonly DeckItem[]): void => {
     if (items.length === 0) {
+      deckPanel.sync([], panelHandlers);
       panelOpen = false;
       syncPanelMount();
       return;
     }
 
-    deckPanel.render(items, {
-      onCopyAll: () => {
-        void onCopyAll();
-      },
-      onClearAll: () => {
-        clearDeck();
-      },
-      onRemoveItem: (id) => {
-        removeDeckItems([id]);
-      },
-    });
+    deckPanel.sync(items, panelHandlers);
     syncPanelMount();
     if (panelOpen) positionPanel();
   };
@@ -214,7 +227,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       setStatus("copying");
       void onCopyAll()
         .then((didCopy) => {
-          if (didCopy) setStatus("flash");
+          if (didCopy && getDeckItems().length === 0) setStatus("flash");
         })
         .catch(() => {
           // Clipboard failure or subscriber throw — unlock the affordance.

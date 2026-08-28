@@ -99,7 +99,10 @@ export const removeDeckItems = (ids: readonly string[]): void => {
 export const updateDeckItem = (id: string, content: string): void => {
   loadOnce();
   const trimmed = content.trim();
-  if (!trimmed) return;
+  if (!trimmed) {
+    removeDeckItems([id]);
+    return;
+  }
   const index = items.findIndex((item) => item.id === id);
   if (index === -1) return;
   if (items[index]!.content === trimmed) return;

@@ -1,5 +1,5 @@
 import { DECK_UI_ATTRIBUTE, REACT_GRAB_IGNORE_ATTRIBUTE, REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE } from "./constants.js";
-import { updateDeckItem, type DeckItem } from "./deck-store.js";
+import { type DeckItem } from "./deck-store.js";
 
 const markPanelControl = (element: HTMLElement): void => {
   element.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
@@ -23,6 +23,27 @@ const PANEL_RADIUS = "10px";
 const PANEL_PAD = "12px";
 const ITEM_GAP = "16px";
 const FIELD_LINE = "1.45";
+const ITEM_ID_ATTR = "data-deck-item-id";
+
+const applyFocusVisibleRing = (element: HTMLElement): void => {
+  let suppressRing = false;
+  element.addEventListener("mousedown", () => {
+    suppressRing = true;
+  });
+  element.addEventListener("focus", () => {
+    requestAnimationFrame(() => {
+      if (!suppressRing && element.matches(":focus-visible")) {
+        element.style.outline = `1px solid ${t.borderFocus}`;
+        element.style.outlineOffset = "2px";
+      }
+      suppressRing = false;
+    });
+  });
+  element.addEventListener("blur", () => {
+    element.style.outline = "none";
+    element.style.outlineOffset = "0";
+  });
+};
 
 export const createDeckPanel = (): HTMLDivElement => {
   const panel = document.createElement("div");
@@ -48,10 +69,22 @@ export const createDeckPanel = (): HTMLDivElement => {
   return panel;
 };
 
-const createItemField = (content: string, onCommit: (next: string) => void): HTMLTextAreaElement => {
+type PanelHandlers = {
+  onCopyAll: () => void;
+  onClearAll: () => void;
+  onRemoveItem: (id: string) => void;
+  onUpdateItem: (id: string, content: string) => void;
+};
+
+const createItemField = (
+  itemId: string,
+  content: string,
+  handlers: PanelHandlers,
+): HTMLTextAreaElement => {
   const field = document.createElement("textarea");
   field.value = content;
   field.rows = 3;
+  field.setAttribute(ITEM_ID_ATTR, itemId);
   markPanelControl(field);
   Object.assign(field.style, {
     flex: "1",
@@ -71,14 +104,15 @@ const createItemField = (content: string, onCommit: (next: string) => void): HTM
     outline: "none",
   });
 
-  field.addEventListener("focus", () => {
-    field.style.outline = `1px solid ${t.borderFocus}`;
-    field.style.outlineOffset = "2px";
-  });
+  applyFocusVisibleRing(field);
+
   field.addEventListener("blur", () => {
-    field.style.outline = "none";
-    field.style.outlineOffset = "0";
-    onCommit(field.value);
+    const next = field.value;
+    if (!next.trim()) {
+      handlers.onRemoveItem(itemId);
+      return;
+    }
+    handlers.onUpdateItem(itemId, next);
   });
   field.addEventListener("keydown", (event) => {
     event.stopPropagation();
@@ -130,160 +164,191 @@ const createIconButton = (
   button.addEventListener("mouseleave", () => {
     button.style.color = t.textMuted;
   });
-  button.addEventListener("focus-visible", () => {
-    button.style.outline = `1px solid ${t.borderFocus}`;
-    button.style.outlineOffset = "2px";
-  });
-  button.addEventListener("blur", () => {
-    button.style.outline = "none";
-    button.style.outlineOffset = "0";
-  });
+  applyFocusVisibleRing(button);
   return button;
+};
+
+const createItemRow = (index: number, item: DeckItem, handlers: PanelHandlers): HTMLElement => {
+  const row = document.createElement("article");
+  row.setAttribute(DECK_UI_ATTRIBUTE, "panel-item");
+  row.setAttribute(ITEM_ID_ATTR, item.id);
+  Object.assign(row.style, {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "8px",
+  });
+
+  const indexLabel = document.createElement("span");
+  indexLabel.setAttribute("data-deck-item-index", "true");
+  indexLabel.textContent = String(index + 1);
+  Object.assign(indexLabel.style, {
+    flex: "none",
+    width: "14px",
+    paddingTop: "1px",
+    color: t.textMuted,
+    fontSize: "11px",
+    fontWeight: "600",
+    fontVariantNumeric: "tabular-nums",
+    textAlign: "right",
+  });
+
+  const field = createItemField(item.id, item.content, handlers);
+  field.setAttribute(DECK_UI_ATTRIBUTE, "panel-preview");
+
+  const deleteButton = createIconButton("Remove from deck", "delete-item", "×", {
+    fontSize: "16px",
+    marginTop: "-1px",
+  });
+  deleteButton.setAttribute(ITEM_ID_ATTR, item.id);
+  deleteButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    handlers.onRemoveItem(item.id);
+  });
+
+  row.append(indexLabel, field, deleteButton);
+  return row;
 };
 
 export interface DeckPanelView {
   panel: HTMLDivElement;
-  render: (
-    items: readonly DeckItem[],
-    handlers: {
-      onCopyAll: () => void;
-      onClearAll: () => void;
-      onRemoveItem: (id: string) => void;
-    },
-  ) => void;
+  hasFocusedField: () => boolean;
+  sync: (items: readonly DeckItem[], handlers: PanelHandlers) => void;
 }
 
 export const createDeckPanelView = (): DeckPanelView => {
   const panel = createDeckPanel();
+  const scroll = document.createElement("div");
+  Object.assign(scroll.style, {
+    flex: "1",
+    minHeight: "0",
+    overflowY: "auto",
+    padding: PANEL_PAD,
+    display: "flex",
+    flexDirection: "column",
+    gap: ITEM_GAP,
+  });
 
-  const render = (
-    items: readonly DeckItem[],
-    handlers: {
-      onCopyAll: () => void;
-      onClearAll: () => void;
-      onRemoveItem: (id: string) => void;
-    },
-  ): void => {
-    panel.replaceChildren();
-    if (items.length === 0) return;
+  const footer = document.createElement("footer");
+  Object.assign(footer.style, {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    padding: `0 ${PANEL_PAD} ${PANEL_PAD}`,
+    flexShrink: "0",
+  });
 
-    const scroll = document.createElement("div");
-    Object.assign(scroll.style, {
-      flex: "1",
-      minHeight: "0",
-      overflowY: "auto",
-      padding: PANEL_PAD,
-      display: "flex",
-      flexDirection: "column",
-      gap: ITEM_GAP,
-    });
+  const meta = document.createElement("div");
+  Object.assign(meta.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    minWidth: "0",
+    color: t.textMuted,
+    fontSize: "11px",
+  });
 
-    for (const [index, item] of items.entries()) {
-      const row = document.createElement("article");
-      row.setAttribute(DECK_UI_ATTRIBUTE, "panel-item");
-      Object.assign(row.style, {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: "8px",
-      });
+  const countLabel = document.createElement("span");
+  const separator = document.createElement("span");
+  separator.textContent = "·";
+  separator.setAttribute("aria-hidden", "true");
 
-      const indexLabel = document.createElement("span");
-      indexLabel.textContent = String(index + 1);
-      Object.assign(indexLabel.style, {
-        flex: "none",
-        width: "14px",
-        paddingTop: "1px",
-        color: t.textMuted,
-        fontSize: "11px",
-        fontWeight: "600",
-        fontVariantNumeric: "tabular-nums",
-        textAlign: "right",
-      });
+  const clearButton = createIconButton("Clear all deck items", "clear-all", "Clear", {
+    fontSize: "11px",
+    minWidth: "0",
+    minHeight: "24px",
+    padding: "4px 0",
+  });
 
-      const field = createItemField(item.content, (next) => {
-        if (next.trim()) updateDeckItem(item.id, next);
-      });
-      field.setAttribute(DECK_UI_ATTRIBUTE, "panel-preview");
+  const copyButton = createIconButton("Copy all deck items", "copy-all", "Copy all", {
+    flex: "none",
+    padding: "6px 10px",
+    borderRadius: "6px",
+    background: t.submitBg,
+    color: t.submitFg,
+    fontSize: "12px",
+    fontWeight: "600",
+    minWidth: "0",
+  });
+  copyButton.addEventListener("mouseenter", () => {
+    copyButton.style.color = t.submitFg;
+  });
+  copyButton.addEventListener("mouseleave", () => {
+    copyButton.style.color = t.submitFg;
+  });
 
-      const deleteButton = createIconButton("Remove from deck", "delete-item", "×", {
-        fontSize: "16px",
-        marginTop: "-1px",
-      });
-      deleteButton.setAttribute("data-deck-item-id", item.id);
-      deleteButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        handlers.onRemoveItem(item.id);
-      });
+  let footerHandlers: PanelHandlers | null = null;
 
-      row.append(indexLabel, field, deleteButton);
-      scroll.append(row);
+  clearButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    footerHandlers?.onClearAll();
+  });
+  copyButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    footerHandlers?.onCopyAll();
+  });
+
+  meta.append(countLabel, separator, clearButton);
+  footer.append(meta, copyButton);
+  panel.append(scroll, footer);
+
+  const getRowField = (row: Element): HTMLTextAreaElement | null =>
+    row.querySelector(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
+
+  const hasFocusedField = (): boolean =>
+    scroll.contains(document.activeElement) &&
+    document.activeElement instanceof HTMLTextAreaElement &&
+    document.activeElement.matches(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
+
+  const sync = (items: readonly DeckItem[], handlers: PanelHandlers): void => {
+    if (items.length === 0) {
+      scroll.replaceChildren();
+      return;
     }
 
-    const footer = document.createElement("footer");
-    Object.assign(footer.style, {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: "12px",
-      padding: `0 ${PANEL_PAD} ${PANEL_PAD}`,
-      flexShrink: "0",
-    });
-
-    const meta = document.createElement("div");
-    Object.assign(meta.style, {
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-      minWidth: "0",
-      color: t.textMuted,
-      fontSize: "11px",
-    });
-
-    const countLabel = document.createElement("span");
+    footerHandlers = handlers;
     countLabel.textContent = `${items.length} ${items.length === 1 ? "item" : "items"}`;
 
-    const separator = document.createElement("span");
-    separator.textContent = "·";
-    separator.setAttribute("aria-hidden", "true");
+    const nextIds = new Set(items.map((item) => item.id));
+    const existingRows = [...scroll.querySelectorAll<HTMLElement>(`article[${DECK_UI_ATTRIBUTE}="panel-item"]`)];
+    const rowsById = new Map(existingRows.map((row) => [row.getAttribute(ITEM_ID_ATTR), row] as const));
 
-    const clearButton = createIconButton("Clear all deck items", "clear-all", "Clear", {
-      fontSize: "11px",
-      minWidth: "0",
-      minHeight: "24px",
-      padding: "4px 0",
-    });
-    clearButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      handlers.onClearAll();
-    });
+    for (const row of existingRows) {
+      const id = row.getAttribute(ITEM_ID_ATTR);
+      if (!id || nextIds.has(id)) continue;
+      const field = getRowField(row);
+      if (field === document.activeElement) continue;
+      row.remove();
+      rowsById.delete(id);
+    }
 
-    meta.append(countLabel, separator, clearButton);
+    const orderedRows: HTMLElement[] = [];
+    for (const [index, item] of items.entries()) {
+      let row = rowsById.get(item.id);
+      if (!row) {
+        row = createItemRow(index, item, handlers);
+        rowsById.set(item.id, row);
+      } else {
+        const indexLabel = row.querySelector<HTMLElement>("[data-deck-item-index]");
+        if (indexLabel) indexLabel.textContent = String(index + 1);
 
-    const copyButton = createIconButton("Copy all deck items", "copy-all", "Copy all", {
-      flex: "none",
-      padding: "6px 10px",
-      borderRadius: "6px",
-      background: t.submitBg,
-      color: t.submitFg,
-      fontSize: "12px",
-      fontWeight: "600",
-      minWidth: "0",
-    });
-    copyButton.addEventListener("mouseenter", () => {
-      copyButton.style.color = t.submitFg;
-    });
-    copyButton.addEventListener("mouseleave", () => {
-      copyButton.style.color = t.submitFg;
-    });
-    copyButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      handlers.onCopyAll();
-    });
+        const field = getRowField(row);
+        if (field && field !== document.activeElement && field.value !== item.content) {
+          field.value = item.content;
+        }
+      }
+      orderedRows.push(row);
+    }
 
-    footer.append(meta, copyButton);
+    for (const [index, row] of orderedRows.entries()) {
+      if (scroll.children[index] !== row) scroll.insertBefore(row, scroll.children[index] ?? null);
+    }
+    while (scroll.children.length > orderedRows.length) {
+      scroll.lastElementChild?.remove();
+    }
+
     panel.style.display = "flex";
-    panel.append(scroll, footer);
   };
 
-  return { panel, render };
+  return { panel, hasFocusedField, sync };
 };
