@@ -51,14 +51,21 @@ A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-
 
 ## Install
 
+Not on npm yet — both builds below come straight from this repo, pinned to a
+tag so the URL can't drift under you.
+
 Script tag, next to React Grab's own (dev only):
 
 ```html
 <script src="https://unpkg.com/react-grab@0.2.0/dist/index.global.js"></script>
-<script src="https://unpkg.com/react-grab-text/dist/global.global.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/artisticmedic/react-grab-text@v0.2.0/dist/global.global.js"></script>
 ```
 
 Or as a module, after React Grab is loaded:
+
+```bash
+npm install react-grab github:artisticmedic/react-grab-text#v0.2.0
+```
 
 ```ts
 import "react-grab";
