@@ -1,12 +1,12 @@
 import { DECK_PLUGIN_NAME } from "./constants.js";
-import { createDeckBadge } from "./deck-badge.js";
+import { createDeckUi } from "./deck-ui.js";
 import {
-  addDeckItem,
   getDeckItems,
   removeDeckItems,
   subscribeDeck,
   type DeckCopyResult,
 } from "./deck-store.js";
+import { queueDeckItemIfBatch } from "./deck-queue.js";
 import { formatDeck } from "./format-deck.js";
 import type { ReactGrabPlugin } from "./react-grab-types.js";
 import { copyTextToClipboard } from "./utils/copy-text-to-clipboard.js";
@@ -43,17 +43,17 @@ export const createDeckPlugin = (): ReactGrabPlugin => ({
     // Content arrives as `comment\n<fenced payload>` (comment optional) —
     // every successful grab lands in the deck alongside the clipboard write.
     onCopySuccess: (_elements, content) => {
-      addDeckItem(content);
+      queueDeckItemIfBatch(content);
     },
   },
   setup: () => {
-    const badge = createDeckBadge(async () => (await copyDeckToClipboard()).didCopy);
-    const unsubscribe = subscribeDeck((items) => badge.update(items.length));
+    const ui = createDeckUi(async () => (await copyDeckToClipboard()).didCopy);
+    const unsubscribe = subscribeDeck((items) => ui.update(items.length));
     return {
       cleanup: () => {
         // Items survive in the module store + sessionStorage; only UI unmounts.
         unsubscribe();
-        badge.destroy();
+        ui.destroy();
         return undefined;
       },
     };

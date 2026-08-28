@@ -10,6 +10,9 @@ export {
   removeDeckItems,
   subscribeDeck,
 } from "./deck-store.js";
+export { getDeckMode, isBatchMode, setDeckMode, subscribeDeckMode, toggleDeckMode } from "./deck-mode.js";
+export type { DeckMode } from "./deck-mode.js";
+export { queueDeckItemIfBatch } from "./deck-queue.js";
 export { formatDeck } from "./format-deck.js";
 export type { DeckCopyResult, DeckItem } from "./deck-store.js";
 export type {

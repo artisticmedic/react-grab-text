@@ -3,76 +3,128 @@ import { REACT_GRAB_ATTRIBUTE, expect, test, type DemoPageObject } from "./fixtu
 const HEADLINE = '[data-testid="headline"]';
 const TAGLINE = '[data-testid="tagline"]';
 
-const BADGE = '[data-react-grab-deck-ui="badge"]';
+const DECK_TOGGLE = '[data-react-grab-deck-ui="mode-toggle"]';
+const DECK_COUNT = `${DECK_TOGGLE} [data-react-grab-deck-face="count"]`;
+const DECK_CHECK = `${DECK_TOGGLE} [data-react-grab-deck-face="check"]`;
+const DECK_STACK = `${DECK_TOGGLE} [data-react-grab-deck-face="stack"]`;
+const PANEL_TOGGLE = '[data-react-grab-deck-ui="panel-toggle"]';
+const PANEL = '[data-react-grab-deck-ui="panel"]';
+const DELETE_ITEM = '[data-react-grab-deck-ui="delete-item"]';
+const PANEL_MODE_TOGGLE = '[data-react-grab-deck-ui="panel-mode-toggle"]';
 
-// The toolbar animates, so Playwright's hit-testing click never sees it
-// stable — click programmatically, same pattern as fixtures' activateTextAction.
-const clickBadge = async (demo: DemoPageObject): Promise<void> => {
+const clickDeckAffordance = async (demo: DemoPageObject): Promise<void> => {
   await demo.page.evaluate((attributeName) => {
     const host = document.querySelector(`[${attributeName}]`);
     const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
-    root?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="badge"]')?.click();
+    root?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="mode-toggle"]')?.click();
   }, REACT_GRAB_ATTRIBUTE);
 };
 
-// A plain react-grab copy grab: activate select mode, click the target, then
-// wait for the deck badge to register the copy (the copy pipeline resolves
-// source info asynchronously before the hooks fire).
+const enableBatchMode = async (demo: DemoPageObject): Promise<void> => {
+  const toggle = demo.page.locator(DECK_TOGGLE);
+  if ((await toggle.getAttribute("aria-pressed")) === "true") return;
+  await clickDeckAffordance(demo);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+};
+
+const disableBatchMode = async (demo: DemoPageObject): Promise<void> => {
+  const toggle = demo.page.locator(DECK_TOGGLE);
+  if ((await toggle.getAttribute("aria-pressed")) === "false") return;
+  await clickDeckAffordance(demo);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+};
+
+const clickPanelToggle = async (demo: DemoPageObject): Promise<void> => {
+  await demo.page.evaluate((attributeName) => {
+    const host = document.querySelector(`[${attributeName}]`);
+    const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+    root
+      ?.querySelector<HTMLButtonElement>('[data-react-grab-deck-ui="panel-toggle"]')
+      ?.click();
+  }, REACT_GRAB_ATTRIBUTE);
+};
+
+const expectDeckCount = async (
+  demo: DemoPageObject,
+  expected: string,
+): Promise<void> => {
+  await expect(demo.page.locator(DECK_COUNT)).toHaveText(expected, { timeout: 10_000 });
+};
+
+const expectDeckStackVisible = async (demo: DemoPageObject): Promise<void> => {
+  await expect(demo.page.locator(DECK_STACK)).toHaveCSS("opacity", "1");
+  await expect(demo.page.locator(DECK_COUNT)).toHaveCSS("opacity", "0");
+};
+
+// Queue a copy grab into the deck (batch mode). Uses the API directly because
+// the default select tool is comment-first — a click opens the prompt instead
+// of copying immediately.
 const copyGrab = async (
   demo: DemoPageObject,
   selector: string,
   expectedCount: number,
 ): Promise<void> => {
-  await demo.activate();
-  await demo.hoverUntilTargeted(selector);
-  await demo.clickTarget(selector);
-  await expect(demo.page.locator(BADGE)).toHaveText(String(expectedCount), { timeout: 10_000 });
+  await enableBatchMode(demo);
+  const copied = await demo.page.evaluate(async (sel) => {
+    const element = document.querySelector(sel);
+    if (!element) return false;
+    return (await window.__REACT_GRAB__?.copyElement(element)) ?? false;
+  }, selector);
+  expect(copied).toBe(true);
+  await expectDeckCount(demo, String(expectedCount));
 };
 
 test.describe("deck", () => {
-  test("the badge sits next to the toolbar Text action and is hidden while empty", async ({
-    demo,
-  }) => {
-    const badge = demo.page.locator(BADGE);
-    // Injection waits for the toolbar to exist (500ms reattach interval).
-    await expect(badge).toBeAttached({ timeout: 10_000 });
-    await expect(badge).toBeHidden();
-    const isAfterTextButton = await demo.page.evaluate((attributeName) => {
+  test("the deck controls sit next to the toolbar Text action", async ({ demo }) => {
+    const controls = demo.page.locator('[data-react-grab-deck-ui="controls"]');
+    await expect(controls).toBeAttached({ timeout: 10_000 });
+    // Colour parity is an at-rest claim: batch mode is on by default, which
+    // paints the deck icon active on purpose.
+    await disableBatchMode(demo);
+    await expectDeckStackVisible(demo);
+    await expect(demo.page.locator(DECK_TOGGLE)).toBeVisible();
+    const placement = await demo.page.evaluate((attributeName) => {
       const host = document.querySelector(`[${attributeName}]`);
       const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
       const textButton = root?.querySelector('[data-react-grab-toolbar-action="text"]');
-      return textButton?.nextElementSibling?.getAttribute("data-react-grab-deck-ui") === "badge";
-    }, REACT_GRAB_ATTRIBUTE);
-    expect(isAfterTextButton).toBe(true);
-
-    // The injected element gets none of react-grab's shadow styles — its
-    // color must resolve to react-grab's own theme foreground token.
-    const colors = await demo.page.evaluate((attributeName) => {
-      const host = document.querySelector(`[${attributeName}]`);
-      const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
-      const badgeElement = root?.querySelector('[data-react-grab-deck-ui="badge"]');
-      if (!badgeElement) return null;
+      const textWrapper = textButton?.parentElement ?? null;
+      const deckControls = root?.querySelector('[data-react-grab-deck-ui="controls"]');
       return {
-        badge: getComputedStyle(badgeElement).color,
-        theme: getComputedStyle(badgeElement).getPropertyValue("--rg-text-primary").trim(),
+        isAfterTextWrapper:
+          textWrapper?.nextElementSibling?.getAttribute("data-react-grab-deck-ui") === "controls",
+        sharesToolbarRow: deckControls?.parentElement === textWrapper?.parentElement,
+        notInsideTextWrapper: !textWrapper?.contains(deckControls ?? null),
       };
     }, REACT_GRAB_ATTRIBUTE);
-    expect(colors).not.toBeNull();
-    expect(colors!.theme).not.toBe("");
-    // Resolve the token through a scratch element so both sides compare in
-    // the same computed rgb() form.
-    const themeAsRgb = await demo.page.evaluate((themeColor) => {
-      const probe = document.createElement("span");
-      probe.style.color = themeColor;
-      document.body.appendChild(probe);
-      const resolved = getComputedStyle(probe).color;
-      probe.remove();
-      return resolved;
-    }, colors!.theme);
-    expect(colors!.badge).toBe(themeAsRgb);
+    expect(placement.isAfterTextWrapper).toBe(true);
+    expect(placement.sharesToolbarRow).toBe(true);
+    expect(placement.notInsideTextWrapper).toBe(true);
+
+    // Poll: the icon colour is transitioned, so leaving batch mode animates the
+    // deck icon down to the idle token rather than snapping to it.
+    await expect
+      .poll(async () =>
+        demo.page.evaluate((attributeName) => {
+          const host = document.querySelector(`[${attributeName}]`);
+          const root = host?.shadowRoot?.querySelector(`[${attributeName}]`);
+          const deckIcon = root?.querySelector('[data-react-grab-deck-ui="mode-toggle"] svg');
+          const textIcon = root?.querySelector('[data-react-grab-toolbar-action="text"] svg');
+          if (!deckIcon || !textIcon) return null;
+          return getComputedStyle(deckIcon).color === getComputedStyle(textIcon).color;
+        }, REACT_GRAB_ATTRIBUTE),
+      )
+      .toBe(true);
   });
 
-  test("a copy grab is fenced on the clipboard and counts up the badge", async ({ demo }) => {
+  test("single mode keeps copy grabs off the deck", async ({ demo }) => {
+    await disableBatchMode(demo);
+    await demo.activate();
+    await demo.hoverUntilTargeted(HEADLINE);
+    await demo.clickTarget(HEADLINE);
+    await expectDeckStackVisible(demo);
+  });
+
+  test("batch mode queues copy grabs on the deck affordance", async ({ demo }) => {
     await copyGrab(demo, HEADLINE, 1);
 
     const clipboard = await demo.readClipboard();
@@ -82,52 +134,121 @@ test.describe("deck", () => {
     await copyGrab(demo, TAGLINE, 2);
   });
 
-  test("clicking the badge copies the numbered, --separated deck and flushes it", async ({
+  test("clicking the deck affordance copies the numbered, --separated deck and flushes it", async ({
     demo,
   }) => {
     await copyGrab(demo, HEADLINE, 1);
     await copyGrab(demo, TAGLINE, 2);
     await demo.waitForActive(false);
 
-    await clickBadge(demo);
+    await clickDeckAffordance(demo);
 
-    // The flash must be visible, not just present — the flush drops the count
-    // to 0 mid-copy and the badge must not hide before the checkmark shows.
-    await expect(demo.page.locator(BADGE)).toHaveText("✓");
-    await expect(demo.page.locator(BADGE)).toBeVisible();
+    await expect(demo.page.locator(DECK_CHECK)).toHaveCSS("opacity", "1");
     const clipboard = await demo.readClipboard();
     expect(clipboard).toMatch(/^1\.\n```\n\[<h1 data-testid="headline">/);
     expect(clipboard).toContain("\n--\n2.\n```\n");
     expect(clipboard).toMatch(/\[<p data-testid="tagline">/);
     expect(clipboard).toMatch(/\n```$/);
 
-    // Copying flushes the queue; after the flash the badge disappears.
-    await expect(demo.page.locator(BADGE)).toBeHidden({ timeout: 5_000 });
+    await expectDeckStackVisible(demo);
     expect(
       await demo.page.evaluate(() => sessionStorage.getItem("react-grab-deck")),
     ).toBe("[]");
   });
 
-  test("an empty deck leaves no visible badge to click", async ({ demo }) => {
-    // Hidden = unclickable; nothing can reach the clipboard through it.
-    await expect(demo.page.locator(BADGE)).toBeHidden();
+  test("an empty deck shows the stack affordance, not a count", async ({ demo }) => {
+    await expectDeckStackVisible(demo);
   });
 
   test("the deck survives a reload within the tab", async ({ demo }) => {
     await copyGrab(demo, HEADLINE, 1);
 
     await demo.goto();
-    await expect(demo.page.locator(BADGE)).toHaveText("1");
+    await expectDeckCount(demo, "1");
   });
 
-  test("a text edit commit does not land in the deck", async ({ demo }) => {
+  test("a text edit commit lands in the deck when batch mode is on", async ({ demo }) => {
+    await enableBatchMode(demo);
     await demo.startEditing(HEADLINE);
     await demo.selectAllInEditor();
     await demo.page.keyboard.type("A different headline");
     await demo.page.keyboard.press("Enter");
     await demo.waitForTextEdit();
 
-    // The Text tool copies through its own path, not react-grab's pipeline.
-    await expect(demo.page.locator(BADGE)).toBeHidden();
+    await expectDeckCount(demo, "1");
+  });
+
+  test("a text edit commit stays off the deck in single mode", async ({ demo }) => {
+    await disableBatchMode(demo);
+    await demo.startEditing(HEADLINE);
+    await demo.selectAllInEditor();
+    await demo.page.keyboard.type("A different headline");
+    await demo.page.keyboard.press("Enter");
+    await demo.waitForTextEdit();
+
+    await expectDeckStackVisible(demo);
+  });
+
+  test("deck panel items can be edited in place", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await clickPanelToggle(demo);
+    const preview = demo.page.locator('[data-react-grab-deck-ui="panel-preview"]');
+    await preview.fill("edited grab body");
+    await preview.blur();
+
+    await clickDeckAffordance(demo);
+    await expect(demo.page.locator(DECK_CHECK)).toHaveCSS("opacity", "1");
+    const clipboard = await demo.readClipboard();
+    expect(clipboard).toContain("edited grab body");
+  });
+
+  test("the deck panel can delete one queued item", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await copyGrab(demo, TAGLINE, 2);
+
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+    await expect(demo.page.locator(DELETE_ITEM)).toHaveCount(2);
+
+    await demo.page.locator(DELETE_ITEM).first().click({ force: true });
+
+    await expectDeckCount(demo, "1");
+    await expect(demo.page.locator(DELETE_ITEM)).toHaveCount(1);
+  });
+
+  test("batch mode stays switchable from the panel once the deck has items", async ({
+    demo,
+  }) => {
+    // The toolbar affordance becomes copy-all at the first queued item, so the
+    // panel is the only way back to single mode without emptying the deck.
+    await copyGrab(demo, HEADLINE, 1);
+    await clickPanelToggle(demo);
+
+    const modeButton = demo.page.locator(PANEL_MODE_TOGGLE);
+    await expect(modeButton).toHaveText("Batch on");
+    await expect(modeButton).toHaveAttribute("aria-pressed", "true");
+
+    await modeButton.click();
+    await expect(modeButton).toHaveText("Batch off");
+    await expect(demo.page.locator(DECK_TOGGLE)).toHaveAttribute("aria-pressed", "false");
+
+    // Switching mode leaves the queue alone; it only stops new grabs joining it.
+    await expectDeckCount(demo, "1");
+    const copied = await demo.page.evaluate(async (sel) => {
+      const element = document.querySelector(sel);
+      if (!element) return false;
+      return (await window.__REACT_GRAB__?.copyElement(element)) ?? false;
+    }, TAGLINE);
+    expect(copied).toBe(true);
+    await expectDeckCount(demo, "1");
+  });
+
+  test("the deck panel closes on an outside click", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+
+    await demo.page.locator(HEADLINE).click({ force: true });
+    await expect(demo.page.locator(PANEL)).toBeHidden();
   });
 });

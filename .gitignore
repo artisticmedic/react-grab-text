@@ -1,5 +1,6 @@
 node_modules/
-dist/
+# dist/ is committed on purpose: with no npm release, jsDelivr serves the
+# script-tag build straight from a tag in this repo. Rebuild before tagging.
 demo/dist/
 test-results/
 playwright-report/

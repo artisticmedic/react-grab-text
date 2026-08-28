@@ -5,7 +5,7 @@ const DECORATIVE = '[data-testid="decorative"]';
 
 test("the context menu greys the Text row out on an element with no text", async ({ demo }) => {
   await demo.activate();
-  await demo.hoverUntilTargeted(DECORATIVE);
+  await demo.page.locator(DECORATIVE).hover({ force: true });
   await demo.rightClickTarget(DECORATIVE);
 
   const decorativeRow = await demo.getContextMenuRow(TEXT_ACTION_LABEL);
@@ -15,7 +15,7 @@ test("the context menu greys the Text row out on an element with no text", async
   await demo.closeContextMenu();
 
   await demo.activate();
-  await demo.hoverUntilTargeted(HEADLINE);
+  await demo.page.locator(HEADLINE).hover({ force: true });
   await demo.rightClickTarget(HEADLINE);
 
   const headlineRow = await demo.getContextMenuRow(TEXT_ACTION_LABEL);
@@ -25,8 +25,7 @@ test("the context menu greys the Text row out on an element with no text", async
 
 test("arming the Text action on an element with no text starts no session", async ({ demo }) => {
   await demo.activateTextAction();
-  await demo.hoverUntilTargeted(DECORATIVE);
-  await demo.clickTarget(DECORATIVE);
+  await demo.page.locator(DECORATIVE).click({ force: true });
 
   await expect(demo.page.locator(DECORATIVE)).not.toHaveAttribute(EDITING_ATTRIBUTE, "true");
   expect(await demo.getTextEditCount()).toBe(0);

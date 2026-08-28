@@ -23,10 +23,14 @@ The edit stays applied on the page so you can read it in context; a refresh rese
 
 ## Deck
 
-React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint: every successful grab (including its typed comment) also lands in a queue, and one action copies the whole queue as a single structured block.
+React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint in **batch mode**: every successful grab (copy or text edit) also lands in a queue, and one action copies the whole queue as a single structured block.
 
-1. Grab elements as usual; add comments where wanted. Each grab still reaches the clipboard individually — and a bare count appears in the toolbar next to the Text action (no footprint at all while the deck is empty).
-2. Click the number: every item lands on the clipboard, numbered and separated by `--` lines, and the deck flushes itself. A failed clipboard write keeps the queue intact.
+**Batch mode is on by default** — collecting is the point of the deck, and a review pass that silently dropped its first few grabs would cost more than one click to turn it off. **Single mode** sends each grab to the clipboard only and keeps the deck empty and invisible; switch with the ◫ button next to the Text action.
+
+1. Grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
+2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
+3. Click ▾ to open the deck panel, edit items in place, remove individual items with ×, or clear all.
+4. The panel footer holds the batch-mode switch. The toolbar affordance becomes copy-all once anything is queued, so the panel is where you turn batch mode off without first emptying the deck. Switching to single mode keeps the queue — it only stops new grabs joining it.
 
 ```
 1.
@@ -41,20 +45,27 @@ this label is misleading
 ```
 ```
 
-Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text-tool edits copy through their own path and never enter the deck.
+Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text edits queue in batch mode alongside copy grabs.
 
 A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
 
 ## Install
 
+Not on npm yet — both builds below come straight from this repo, pinned to a
+tag so the URL can't drift under you.
+
 Script tag, next to React Grab's own (dev only):
 
 ```html
 <script src="https://unpkg.com/react-grab@0.2.0/dist/index.global.js"></script>
-<script src="https://unpkg.com/react-grab-text/dist/global.global.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/artisticmedic/react-grab-text@v0.2.0/dist/global.global.js"></script>
 ```
 
 Or as a module, after React Grab is loaded:
+
+```bash
+npm install react-grab github:artisticmedic/react-grab-text#v0.2.0
+```
 
 ```ts
 import "react-grab";
