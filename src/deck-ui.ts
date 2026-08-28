@@ -181,6 +181,21 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     renderPanelItems(items);
   };
 
+  const closePanel = (): void => {
+    if (!panelOpen) return;
+    panelOpen = false;
+    render();
+  };
+
+  const onPointerDownOutsidePanel = (event: PointerEvent): void => {
+    if (!panelOpen) return;
+    const path = event.composedPath();
+    if (path.includes(panel) || path.includes(controls)) return;
+    closePanel();
+  };
+
+  window.addEventListener("pointerdown", onPointerDownOutsidePanel, true);
+
   const setStatus = (next: DeckAffordanceStatus): void => {
     if (status === next) return;
     if (flashTimer !== undefined) {
@@ -314,6 +329,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       window.clearInterval(reattachTimer);
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
+      window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
       if (flashTimer !== undefined) window.clearTimeout(flashTimer);
       endDragTracking();
       unsubscribeDeck();

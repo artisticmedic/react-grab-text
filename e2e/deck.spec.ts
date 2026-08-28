@@ -201,4 +201,13 @@ test.describe("deck", () => {
     await expectDeckCount(demo, "1");
     await expect(demo.page.locator(DELETE_ITEM)).toHaveCount(1);
   });
+
+  test("the deck panel closes on an outside click", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+
+    await demo.page.locator(HEADLINE).click({ force: true });
+    await expect(demo.page.locator(PANEL)).toBeHidden();
+  });
 });
