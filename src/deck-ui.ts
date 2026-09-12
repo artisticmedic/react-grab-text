@@ -287,6 +287,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
   window.addEventListener("resize", onViewportChange);
   window.addEventListener("scroll", onViewportChange, true);
 
+  let lastPanelEdge: ReturnType<typeof getToolbarEdge> | null = null;
   let failedAttachAttempts = 0;
   const attach = (): void => {
     failedAttachAttempts += 1;
@@ -318,6 +319,12 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     if (!isCorrectlyPlaced) {
       if (controls.isConnected) controls.remove();
       anchor.insertAdjacentElement("afterend", controls);
+    }
+
+    const edge = getToolbarEdge(panelToggle);
+    if (edge !== lastPanelEdge) {
+      lastPanelEdge = edge;
+      if (panelOpen) positionPanel();
     }
 
     failedAttachAttempts = 0;

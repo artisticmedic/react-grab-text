@@ -1641,6 +1641,7 @@ var createDeckUi = (onCopyAll) => {
   };
   window.addEventListener("resize", onViewportChange);
   window.addEventListener("scroll", onViewportChange, true);
+  let lastPanelEdge = null;
   let failedAttachAttempts = 0;
   const attach = () => {
     failedAttachAttempts += 1;
@@ -1662,6 +1663,11 @@ var createDeckUi = (onCopyAll) => {
     if (!isCorrectlyPlaced) {
       if (controls.isConnected) controls.remove();
       anchor.insertAdjacentElement("afterend", controls);
+    }
+    const edge = getToolbarEdge(panelToggle);
+    if (edge !== lastPanelEdge) {
+      lastPanelEdge = edge;
+      if (panelOpen) positionPanel();
     }
     failedAttachAttempts = 0;
   };
@@ -1787,7 +1793,7 @@ var createMeasureOverlay = (control) => {
       background:#202024; border:1px solid #414147; border-radius:6px;
       box-shadow:0 2px 8px #0002; font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
-    .details { padding:6px 9px; max-width:calc(100vw - 16px); white-space:pre-line; }
+    .details { padding:6px 9px; max-width:calc(100vw - 16px); white-space:pre-wrap; }
     .hint { width:max-content; padding:5px 10px;
       max-width:calc(100vw - 16px); text-align:center; }
     text { font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -1907,6 +1913,7 @@ Top \xB7 Right \xB7 Bottom \xB7 Left`;
 
 // src/measure-plugin.ts
 var ATTACH_INTERVAL_MS = 500;
+var FAILED_ATTACH_WARN_AT2 = 20;
 var DRAG_THRESHOLD_PX = 5;
 var TOOL_UI_SELECTOR = "[data-react-grab], [data-react-grab-ignore], [data-react-grab-ignore-events]";
 var createRulerIcon = () => {
@@ -1971,7 +1978,7 @@ var createMeasurePlugin = () => {
         if (!overlay) return;
         if (anchor && !anchor.isConnected) anchor = null;
         const target = pointer ? elementAtPoint(pointer.x, pointer.y) : null;
-        overlay.render(target, anchor);
+        overlay.render(target ?? anchor, anchor);
         frame = requestAnimationFrame(render);
       };
       button.addEventListener("click", (event) => {
@@ -2008,25 +2015,31 @@ var createMeasurePlugin = () => {
           return;
         }
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
       };
       const onClick = (event) => {
         if (!overlay || isToolEvent(event)) return;
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
+        if (event.button !== 0) return;
         anchor = elementAtPoint(event.clientX, event.clientY);
         pointer = { x: event.clientX, y: event.clientY };
+      };
+      const onContextMenu = (event) => {
+        if (!overlay || isToolEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
       };
       const onPointerUp = (event) => {
         if (!overlay || isToolEvent(event)) return;
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
       };
       const onKey = (event) => {
         if (!overlay) return;
         if (event.code === "Escape" || event.key === "Escape") {
           event.preventDefault();
-          event.stopImmediatePropagation();
+          event.stopPropagation();
           if (anchor) anchor = null;
           else stop();
         } else if (event.key === "Tab") stop();
@@ -2046,20 +2059,30 @@ var createMeasurePlugin = () => {
       window.addEventListener("click", onClick, true);
       window.addEventListener("auxclick", onClick, true);
       window.addEventListener("dblclick", onClick, true);
+      window.addEventListener("contextmenu", onContextMenu, true);
       window.addEventListener("pointerup", onPointerUp, true);
       window.addEventListener("keydown", onKey, true);
       window.addEventListener("mouseout", onLeave);
       window.addEventListener("blur", onBlur);
       window.addEventListener("pointercancel", onCancel);
+      let failedAttachAttempts = 0;
       const attach = () => {
+        failedAttachAttempts += 1;
+        if (failedAttachAttempts === FAILED_ATTACH_WARN_AT2) {
+          console.warn(
+            "[react-grab-text] measure found no toolbar anchor after 10s \u2014 host toolbar markup may have changed"
+          );
+        }
         const root = document.querySelector("[data-react-grab]")?.shadowRoot;
-        const textAction = root?.querySelector('[data-react-grab-toolbar-action="text"]');
+        const actions = root?.querySelectorAll("[data-react-grab-toolbar-action]");
+        const textAction = root?.querySelector('[data-react-grab-toolbar-action="text"]') ?? (actions?.length ? actions[actions.length - 1] : null);
         const anchorWrapper = textAction?.parentElement;
         if (anchorWrapper?.parentElement && wrapper.nextElementSibling !== anchorWrapper) {
           anchorWrapper.before(wrapper);
         }
         if (anchorWrapper) layout.attach(anchorWrapper);
         if (overlay && !wrapper.isConnected) stop();
+        if (anchorWrapper) failedAttachAttempts = 0;
       };
       attach();
       const timer = window.setInterval(attach, ATTACH_INTERVAL_MS);
@@ -2073,6 +2096,7 @@ var createMeasurePlugin = () => {
           window.removeEventListener("click", onClick, true);
           window.removeEventListener("auxclick", onClick, true);
           window.removeEventListener("dblclick", onClick, true);
+          window.removeEventListener("contextmenu", onContextMenu, true);
           window.removeEventListener("pointerup", onPointerUp, true);
           window.removeEventListener("keydown", onKey, true);
           window.removeEventListener("mouseout", onLeave);

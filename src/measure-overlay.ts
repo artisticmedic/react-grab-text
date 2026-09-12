@@ -26,7 +26,7 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
       background:#202024; border:1px solid #414147; border-radius:6px;
       box-shadow:0 2px 8px #0002; font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
-    .details { padding:6px 9px; max-width:calc(100vw - 16px); white-space:pre-line; }
+    .details { padding:6px 9px; max-width:calc(100vw - 16px); white-space:pre-wrap; }
     .hint { width:max-content; padding:5px 10px;
       max-width:calc(100vw - 16px); text-align:center; }
     text { font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;

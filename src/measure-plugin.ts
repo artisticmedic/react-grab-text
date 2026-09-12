@@ -6,6 +6,7 @@ import type { ReactGrabPlugin } from "./react-grab-types.js";
 import { syncToolbarSegment } from "./utils/sync-toolbar-segment.js";
 
 const ATTACH_INTERVAL_MS = 500;
+const FAILED_ATTACH_WARN_AT = 20;
 const DRAG_THRESHOLD_PX = 5;
 const TOOL_UI_SELECTOR = "[data-react-grab], [data-react-grab-ignore], [data-react-grab-ignore-events]";
 
@@ -72,7 +73,7 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
         if (!overlay) return;
         if (anchor && !anchor.isConnected) anchor = null;
         const target = pointer ? elementAtPoint(pointer.x, pointer.y) : null;
-        overlay.render(target, anchor);
+        overlay.render(target ?? anchor, anchor);
         frame = requestAnimationFrame(render);
       };
       button.addEventListener("click", event => {
@@ -100,25 +101,31 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
         if (!overlay) return;
         if (isToolEvent(event)) { stop(); return; }
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
       };
       const onClick = (event: MouseEvent): void => {
         if (!overlay || isToolEvent(event)) return;
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
+        if (event.button !== 0) return;
         anchor = elementAtPoint(event.clientX, event.clientY);
         pointer = { x: event.clientX, y: event.clientY };
+      };
+      const onContextMenu = (event: MouseEvent): void => {
+        if (!overlay || isToolEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
       };
       const onPointerUp = (event: PointerEvent): void => {
         if (!overlay || isToolEvent(event)) return;
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
       };
       const onKey = (event: KeyboardEvent): void => {
         if (!overlay) return;
         if (event.code === "Escape" || event.key === "Escape") {
           event.preventDefault();
-          event.stopImmediatePropagation();
+          event.stopPropagation();
           if (anchor) anchor = null;
           else stop();
         } else if (event.key === "Tab") stop();
@@ -131,21 +138,32 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
       window.addEventListener("click", onClick, true);
       window.addEventListener("auxclick", onClick, true);
       window.addEventListener("dblclick", onClick, true);
+      window.addEventListener("contextmenu", onContextMenu, true);
       window.addEventListener("pointerup", onPointerUp, true);
       window.addEventListener("keydown", onKey, true);
       window.addEventListener("mouseout", onLeave);
       window.addEventListener("blur", onBlur);
       window.addEventListener("pointercancel", onCancel);
 
+      let failedAttachAttempts = 0;
       const attach = (): void => {
+        failedAttachAttempts += 1;
+        if (failedAttachAttempts === FAILED_ATTACH_WARN_AT) {
+          console.warn(
+            "[react-grab-text] measure found no toolbar anchor after 10s — host toolbar markup may have changed",
+          );
+        }
         const root = document.querySelector("[data-react-grab]")?.shadowRoot;
-        const textAction = root?.querySelector('[data-react-grab-toolbar-action="text"]');
+        const actions = root?.querySelectorAll("[data-react-grab-toolbar-action]");
+        const textAction = root?.querySelector('[data-react-grab-toolbar-action="text"]')
+          ?? (actions?.length ? actions[actions.length - 1] : null);
         const anchorWrapper = textAction?.parentElement;
         if (anchorWrapper?.parentElement && wrapper.nextElementSibling !== anchorWrapper) {
           anchorWrapper.before(wrapper);
         }
         if (anchorWrapper) layout.attach(anchorWrapper);
         if (overlay && !wrapper.isConnected) stop();
+        if (anchorWrapper) failedAttachAttempts = 0;
       };
       attach();
       const timer = window.setInterval(attach, ATTACH_INTERVAL_MS);
@@ -159,6 +177,7 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
           window.removeEventListener("click", onClick, true);
           window.removeEventListener("auxclick", onClick, true);
           window.removeEventListener("dblclick", onClick, true);
+          window.removeEventListener("contextmenu", onContextMenu, true);
           window.removeEventListener("pointerup", onPointerUp, true);
           window.removeEventListener("keydown", onKey, true);
           window.removeEventListener("mouseout", onLeave);
