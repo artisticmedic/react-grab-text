@@ -1811,6 +1811,7 @@ var createMeasureOverlay = (control) => {
   root.append(style, svg, details, hint);
   document.body.append(host);
   let lastSignature = "";
+  let hintBox = { text: "", maxWidth: "", width: 0, height: 0 };
   const shape = (tag, attributes) => {
     const element = document.createElementNS(SVG_NS3, tag);
     for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
@@ -1851,12 +1852,18 @@ var createMeasureOverlay = (control) => {
       const signature = JSON.stringify([bounds, anchorBounds, padding, margin, border, name, target === anchor, innerWidth, innerHeight, toolbarBounds, edge]);
       if (signature === lastSignature) return;
       lastSignature = signature;
+      const scaleX = element instanceof HTMLElement && bounds && element.offsetWidth ? bounds.width / element.offsetWidth : 1;
+      const scaleY = element instanceof HTMLElement && bounds && element.offsetHeight ? bounds.height / element.offsetHeight : 1;
       svg.replaceChildren();
-      hint.textContent = anchor ? "Hover another element to measure \xB7 Click to change anchor \xB7 Esc to clear" : "Measure \xB7 Hover to inspect \xB7 Click to anchor \xB7 Esc to exit";
+      const hintText = anchor ? "Hover another element to measure \xB7 Click to change anchor \xB7 Esc to clear" : "Measure \xB7 Hover to inspect \xB7 Click to anchor \xB7 Esc to exit";
       const isVertical = edge === "left" || edge === "right";
-      hint.style.maxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
-      const hintWidth = hint.offsetWidth;
-      const hintHeight = hint.offsetHeight;
+      const hintMaxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
+      if (hintText !== hintBox.text || hintMaxWidth !== hintBox.maxWidth) {
+        hint.textContent = hintText;
+        hint.style.maxWidth = hintMaxWidth;
+        hintBox = { text: hintText, maxWidth: hintMaxWidth, width: hint.offsetWidth, height: hint.offsetHeight };
+      }
+      const { width: hintWidth, height: hintHeight } = hintBox;
       const hintLeft = edge === "left" ? toolbarBounds.right + VIEWPORT_INSET_PX : edge === "right" ? toolbarBounds.left - hintWidth - VIEWPORT_INSET_PX : toolbarBounds.left + (toolbarBounds.width - hintWidth) / 2;
       const hintTop = edge === "top" ? toolbarBounds.bottom + VIEWPORT_INSET_PX : edge === "bottom" ? toolbarBounds.top - hintHeight - VIEWPORT_INSET_PX : toolbarBounds.top + (toolbarBounds.height - hintHeight) / 2;
       hint.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(hintLeft, window.innerWidth - hintWidth - VIEWPORT_INSET_PX))}px`;
@@ -1864,8 +1871,6 @@ var createMeasureOverlay = (control) => {
       details.hidden = !bounds;
       if (!bounds || !element) return;
       const { left, top, right, bottom, width, height } = bounds;
-      const scaleX = element instanceof HTMLElement && element.offsetWidth ? width / element.offsetWidth : 1;
-      const scaleY = element instanceof HTMLElement && element.offsetHeight ? height / element.offsetHeight : 1;
       const [paddingTop = 0, paddingRight = 0, paddingBottom = 0, paddingLeft = 0] = padding;
       const [marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0] = margin;
       const [borderTop = 0, borderRight = 0, borderBottom = 0, borderLeft = 0] = border;
@@ -1903,9 +1908,11 @@ var createMeasureOverlay = (control) => {
 Padding  ${padding.map(formatMeasurement).join("  ")}
 Margin    ${margin.map(formatMeasurement).join("  ")}
 Top \xB7 Right \xB7 Bottom \xB7 Left`;
-      details.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(left, window.innerWidth - details.offsetWidth - VIEWPORT_INSET_PX))}px`;
-      const preferredTop = top - details.offsetHeight - VIEWPORT_INSET_PX;
-      details.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(preferredTop >= VIEWPORT_INSET_PX ? preferredTop : bottom + VIEWPORT_INSET_PX, window.innerHeight - details.offsetHeight - VIEWPORT_INSET_PX))}px`;
+      const detailsWidth = details.offsetWidth;
+      const detailsHeight = details.offsetHeight;
+      const preferredTop = top - detailsHeight - VIEWPORT_INSET_PX;
+      details.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(left, window.innerWidth - detailsWidth - VIEWPORT_INSET_PX))}px`;
+      details.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(preferredTop >= VIEWPORT_INSET_PX ? preferredTop : bottom + VIEWPORT_INSET_PX, window.innerHeight - detailsHeight - VIEWPORT_INSET_PX))}px`;
     },
     destroy: () => host.remove()
   };
@@ -2047,10 +2054,6 @@ var createMeasurePlugin = () => {
       const onLeave = (event) => {
         if (!event.relatedTarget) pointer = null;
       };
-      const onBlur = () => {
-        stop();
-        press = null;
-      };
       const onCancel = () => {
         press = null;
       };
@@ -2063,7 +2066,7 @@ var createMeasurePlugin = () => {
       window.addEventListener("pointerup", onPointerUp, true);
       window.addEventListener("keydown", onKey, true);
       window.addEventListener("mouseout", onLeave);
-      window.addEventListener("blur", onBlur);
+      window.addEventListener("blur", onCancel);
       window.addEventListener("pointercancel", onCancel);
       let failedAttachAttempts = 0;
       const attach = () => {
@@ -2100,7 +2103,7 @@ var createMeasurePlugin = () => {
           window.removeEventListener("pointerup", onPointerUp, true);
           window.removeEventListener("keydown", onKey, true);
           window.removeEventListener("mouseout", onLeave);
-          window.removeEventListener("blur", onBlur);
+          window.removeEventListener("blur", onCancel);
           window.removeEventListener("pointercancel", onCancel);
           wrapper.remove();
           return void 0;

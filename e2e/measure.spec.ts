@@ -36,6 +36,17 @@ test("anchored measurements show sibling gaps and all four container insets", as
   await expect(page.locator('[data-measure-distance="40 px"]')).toHaveCount(4);
 });
 
+test("the session and its anchor survive leaving the window", async ({ demo, page }) => {
+  await page.locator(TOGGLE).click();
+  await page.getByTestId("measure-card-a").click({ position: { x: 5, y: 5 } });
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator(OVERLAY)).toBeAttached();
+  // The badge only renders against a live anchor, so its return proves the
+  // anchor outlived the blur rather than the overlay merely staying mounted.
+  await page.getByTestId("measure-card-b").hover({ position: { x: 5, y: 5 } });
+  await expect(page.locator('[data-measure-distance="32 px"]')).toHaveCount(1);
+});
+
 test("another Grab action and plugin cleanup release measurement", async ({ demo, page }) => {
   await page.locator(TOGGLE).click();
   await page.locator('[data-react-grab-toolbar-action="text"]').click();

@@ -44,6 +44,7 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
   root.append(style, svg, details, hint);
   document.body.append(host);
   let lastSignature = "";
+  let hintBox = { text: "", maxWidth: "", width: 0, height: 0 };
 
   const shape = (tag: "rect" | "line", attributes: Record<string, string | number>): void => {
     const element = document.createElementNS(SVG_NS, tag);
@@ -86,14 +87,20 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
       const signature = JSON.stringify([bounds, anchorBounds, padding, margin, border, name, target === anchor, innerWidth, innerHeight, toolbarBounds, edge]);
       if (signature === lastSignature) return;
       lastSignature = signature;
+      const scaleX = element instanceof HTMLElement && bounds && element.offsetWidth ? bounds.width / element.offsetWidth : 1;
+      const scaleY = element instanceof HTMLElement && bounds && element.offsetHeight ? bounds.height / element.offsetHeight : 1;
       svg.replaceChildren();
-      hint.textContent = anchor
+      const hintText = anchor
         ? "Hover another element to measure · Click to change anchor · Esc to clear"
         : "Measure · Hover to inspect · Click to anchor · Esc to exit";
       const isVertical = edge === "left" || edge === "right";
-      hint.style.maxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
-      const hintWidth = hint.offsetWidth;
-      const hintHeight = hint.offsetHeight;
+      const hintMaxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
+      if (hintText !== hintBox.text || hintMaxWidth !== hintBox.maxWidth) {
+        hint.textContent = hintText;
+        hint.style.maxWidth = hintMaxWidth;
+        hintBox = { text: hintText, maxWidth: hintMaxWidth, width: hint.offsetWidth, height: hint.offsetHeight };
+      }
+      const { width: hintWidth, height: hintHeight } = hintBox;
       const hintLeft = edge === "left" ? toolbarBounds.right + VIEWPORT_INSET_PX
         : edge === "right" ? toolbarBounds.left - hintWidth - VIEWPORT_INSET_PX
         : toolbarBounds.left + (toolbarBounds.width - hintWidth) / 2;
@@ -106,8 +113,6 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
       if (!bounds || !element) return;
 
       const { left, top, right, bottom, width, height } = bounds;
-      const scaleX = element instanceof HTMLElement && element.offsetWidth ? width / element.offsetWidth : 1;
-      const scaleY = element instanceof HTMLElement && element.offsetHeight ? height / element.offsetHeight : 1;
       const [paddingTop = 0, paddingRight = 0, paddingBottom = 0, paddingLeft = 0] = padding;
       const [marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0] = margin;
       const [borderTop = 0, borderRight = 0, borderBottom = 0, borderLeft = 0] = border;
@@ -143,9 +148,11 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
         }
       }
       details.textContent = `${target === anchor ? "Anchor · " : ""}${name}  ${formatMeasurement(width)} × ${formatMeasurement(height)} px\nPadding  ${padding.map(formatMeasurement).join("  ")}\nMargin    ${margin.map(formatMeasurement).join("  ")}\nTop · Right · Bottom · Left`;
-      details.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(left, window.innerWidth - details.offsetWidth - VIEWPORT_INSET_PX))}px`;
-      const preferredTop = top - details.offsetHeight - VIEWPORT_INSET_PX;
-      details.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(preferredTop >= VIEWPORT_INSET_PX ? preferredTop : bottom + VIEWPORT_INSET_PX, window.innerHeight - details.offsetHeight - VIEWPORT_INSET_PX))}px`;
+      const detailsWidth = details.offsetWidth;
+      const detailsHeight = details.offsetHeight;
+      const preferredTop = top - detailsHeight - VIEWPORT_INSET_PX;
+      details.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(left, window.innerWidth - detailsWidth - VIEWPORT_INSET_PX))}px`;
+      details.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(preferredTop >= VIEWPORT_INSET_PX ? preferredTop : bottom + VIEWPORT_INSET_PX, window.innerHeight - detailsHeight - VIEWPORT_INSET_PX))}px`;
     },
     destroy: () => host.remove(),
   };

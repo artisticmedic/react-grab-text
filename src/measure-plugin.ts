@@ -131,7 +131,6 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
         } else if (event.key === "Tab") stop();
       };
       const onLeave = (event: MouseEvent): void => { if (!event.relatedTarget) pointer = null; };
-      const onBlur = (): void => { stop(); press = null; };
       const onCancel = (): void => { press = null; };
       window.addEventListener("pointermove", onMove, true);
       window.addEventListener("pointerdown", onDown, true);
@@ -142,7 +141,7 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
       window.addEventListener("pointerup", onPointerUp, true);
       window.addEventListener("keydown", onKey, true);
       window.addEventListener("mouseout", onLeave);
-      window.addEventListener("blur", onBlur);
+      window.addEventListener("blur", onCancel);
       window.addEventListener("pointercancel", onCancel);
 
       let failedAttachAttempts = 0;
@@ -181,7 +180,7 @@ export const createMeasurePlugin = (): ReactGrabPlugin => {
           window.removeEventListener("pointerup", onPointerUp, true);
           window.removeEventListener("keydown", onKey, true);
           window.removeEventListener("mouseout", onLeave);
-          window.removeEventListener("blur", onBlur);
+          window.removeEventListener("blur", onCancel);
           window.removeEventListener("pointercancel", onCancel);
           wrapper.remove();
           return undefined;
