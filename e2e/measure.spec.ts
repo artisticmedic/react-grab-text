@@ -47,6 +47,27 @@ test("the session and its anchor survive leaving the window", async ({ demo, pag
   await expect(page.locator('[data-measure-distance="32 px"]')).toHaveCount(1);
 });
 
+test("a negative margin is drawn inward and hatched, not clamped away", async ({ demo, page }) => {
+  const card = page.getByTestId("measure-card-b");
+  await card.evaluate(element => { (element as HTMLElement).style.marginTop = "-24px"; });
+  await page.locator(TOGGLE).click();
+  await card.hover({ position: { x: 5, y: 5 } });
+
+  await expect(page.locator("[data-measure-details]")).toContainText("Margin    -24");
+  const band = await page.locator(OVERLAY).evaluate((host, box) => {
+    const rect = [...(host as HTMLElement).shadowRoot!.querySelectorAll("rect")]
+      .find(node => node.getAttribute("fill")?.startsWith("url(") && Number(node.getAttribute("height")) > 0);
+    if (!rect) return null;
+    return { top: Number(rect.getAttribute("y")), height: Number(rect.getAttribute("height")), boxTop: box };
+  }, await card.evaluate(element => element.getBoundingClientRect().top));
+
+  expect(band).not.toBeNull();
+  expect(band!.height).toBeCloseTo(24, 0);
+  // Inward: the band starts at the border-box edge and runs down into it,
+  // rather than sitting above the edge the way a positive margin does.
+  expect(band!.top).toBeCloseTo(band!.boxTop, 0);
+});
+
 test("another Grab action and plugin cleanup release measurement", async ({ demo, page }) => {
   await page.locator(TOGGLE).click();
   await page.locator('[data-react-grab-toolbar-action="text"]').click();

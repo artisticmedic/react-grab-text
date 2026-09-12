@@ -1826,6 +1826,12 @@ var formatMeasurement = (value) => String(Math.round(value * 10) / 10);
 var SVG_NS3 = "http://www.w3.org/2000/svg";
 var VIEWPORT_INSET_PX = 8;
 var LABEL_HEIGHT_PX = 22;
+var NEGATIVE_MARGIN_PATTERN_ID = "negative-margin";
+var svgNode = (tag, attributes) => {
+  const element = document.createElementNS(SVG_NS3, tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
+  return element;
+};
 var createMeasureOverlay = (control) => {
   const host = document.createElement("div");
   host.setAttribute("data-react-grab-measure", "overlay");
@@ -1848,6 +1854,20 @@ var createMeasureOverlay = (control) => {
   `;
   const svg = document.createElementNS(SVG_NS3, "svg");
   svg.setAttribute("aria-hidden", "true");
+  const hatch = svgNode("pattern", {
+    id: NEGATIVE_MARGIN_PATTERN_ID,
+    width: 6,
+    height: 6,
+    patternUnits: "userSpaceOnUse",
+    patternTransform: "rotate(45)"
+  });
+  hatch.append(
+    svgNode("rect", { width: 6, height: 6, fill: "#f59e0b26" }),
+    svgNode("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#f59e0b", "stroke-width": 2, "stroke-opacity": 0.5 })
+  );
+  const defs = svgNode("defs", {});
+  defs.append(hatch);
+  svg.append(defs);
   const details = document.createElement("div");
   details.className = "details";
   details.setAttribute("data-measure-details", "");
@@ -1860,9 +1880,7 @@ var createMeasureOverlay = (control) => {
   let lastSignature = "";
   let hintBox = { text: "", maxWidth: "", width: 0, height: 0 };
   const shape = (tag, attributes) => {
-    const element = document.createElementNS(SVG_NS3, tag);
-    for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
-    svg.append(element);
+    svg.append(svgNode(tag, attributes));
   };
   const box = (left, top, width, height, fill, stroke = "none") => {
     shape("rect", { x: left, y: top, width: Math.max(0, width), height: Math.max(0, height), fill, stroke });
@@ -1901,7 +1919,7 @@ var createMeasureOverlay = (control) => {
       lastSignature = signature;
       const scaleX = element instanceof HTMLElement && bounds && element.offsetWidth ? bounds.width / element.offsetWidth : 1;
       const scaleY = element instanceof HTMLElement && bounds && element.offsetHeight ? bounds.height / element.offsetHeight : 1;
-      svg.replaceChildren();
+      svg.replaceChildren(defs);
       const hintText = anchor ? "Hover another element to measure \xB7 Click to change anchor \xB7 Esc to clear" : "Measure \xB7 Hover to inspect \xB7 Click to anchor \xB7 Esc to exit";
       const isVertical = edge === "left" || edge === "right";
       const hintMaxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
@@ -1922,10 +1940,15 @@ var createMeasureOverlay = (control) => {
       const [marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0] = margin;
       const [borderTop = 0, borderRight = 0, borderBottom = 0, borderLeft = 0] = border;
       const marginFill = "#f59e0b30";
-      box(left, top - Math.max(0, marginTop) * scaleY, width, Math.max(0, marginTop) * scaleY, marginFill);
-      box(right, top, Math.max(0, marginRight) * scaleX, height, marginFill);
-      box(left, bottom, width, Math.max(0, marginBottom) * scaleY, marginFill);
-      box(left - Math.max(0, marginLeft) * scaleX, top, Math.max(0, marginLeft) * scaleX, height, marginFill);
+      const bandFill = (value) => value < 0 ? `url(#${NEGATIVE_MARGIN_PATTERN_ID})` : marginFill;
+      const topBand = Math.abs(marginTop) * scaleY;
+      const rightBand = Math.abs(marginRight) * scaleX;
+      const bottomBand = Math.abs(marginBottom) * scaleY;
+      const leftBand = Math.abs(marginLeft) * scaleX;
+      box(left, marginTop < 0 ? top : top - topBand, width, topBand, bandFill(marginTop));
+      box(marginRight < 0 ? right - rightBand : right, top, rightBand, height, bandFill(marginRight));
+      box(left, marginBottom < 0 ? bottom - bottomBand : bottom, width, bottomBand, bandFill(marginBottom));
+      box(marginLeft < 0 ? left : left - leftBand, top, leftBand, height, bandFill(marginLeft));
       const innerLeft = left + borderLeft * scaleX;
       const innerTop = top + borderTop * scaleY;
       const paddingBoxWidth = Math.max(0, width - (borderLeft + borderRight) * scaleX);

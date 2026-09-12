@@ -61,7 +61,7 @@ Measurements follow scrolling and resizing. Page clicks are intercepted while me
 
 Run `npm run demo` and open `/measure.html` for the trial with known 32 px and 40 px gaps. The global build registers Measure automatically; module consumers can call `registerMeasurePlugin()` after registering Text. The toolbar attachment currently requires our fork's Text button.
 
-Dimensions and distances use viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements are measured by their enclosing rectangle. Padding and margin labels are computed CSS values in top/right/bottom/left order; collapsed or negative margins are not a direct measure of visible gaps. Closed shadow roots and iframe contents are not inspected. Native top-layer dialogs may cover the overlay.
+Dimensions and distances use viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements are measured by their enclosing rectangle. Padding and margin labels are computed CSS values in top/right/bottom/left order. A negative margin is drawn inside the border box with a hatched fill, since it takes space rather than reserving it; collapsed margins are still not a direct measure of the visible gap. Closed shadow roots and iframe contents are not inspected. Native top-layer dialogs may cover the overlay.
 
 ## Install
 

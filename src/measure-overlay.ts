@@ -5,12 +5,19 @@ import { getToolbarEdge } from "./utils/get-toolbar-edge.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEWPORT_INSET_PX = 8;
 const LABEL_HEIGHT_PX = 22;
+const NEGATIVE_MARGIN_PATTERN_ID = "negative-margin";
 
 export interface MeasureOverlay {
   host: HTMLDivElement;
   render: (target: Element | null, anchor: Element | null) => void;
   destroy: () => void;
 }
+
+const svgNode = (tag: string, attributes: Record<string, string | number>): SVGElement => {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
+  return element;
+};
 
 export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
   const host = document.createElement("div");
@@ -34,6 +41,19 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
   `;
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("aria-hidden", "true");
+  // A negative margin is space taken rather than space reserved, so it is drawn
+  // inside the border box. The hatch keeps a pull from reading as a gap.
+  const hatch = svgNode("pattern", {
+    id: NEGATIVE_MARGIN_PATTERN_ID, width: 6, height: 6,
+    patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)",
+  });
+  hatch.append(
+    svgNode("rect", { width: 6, height: 6, fill: "#f59e0b26" }),
+    svgNode("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#f59e0b", "stroke-width": 2, "stroke-opacity": 0.5 }),
+  );
+  const defs = svgNode("defs", {});
+  defs.append(hatch);
+  svg.append(defs);
   const details = document.createElement("div");
   details.className = "details";
   details.setAttribute("data-measure-details", "");
@@ -47,9 +67,7 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
   let hintBox = { text: "", maxWidth: "", width: 0, height: 0 };
 
   const shape = (tag: "rect" | "line", attributes: Record<string, string | number>): void => {
-    const element = document.createElementNS(SVG_NS, tag);
-    for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
-    svg.append(element);
+    svg.append(svgNode(tag, attributes));
   };
   const box = (left: number, top: number, width: number, height: number, fill: string, stroke = "none"): void => {
     shape("rect", { x: left, y: top, width: Math.max(0, width), height: Math.max(0, height), fill, stroke });
@@ -89,7 +107,7 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
       lastSignature = signature;
       const scaleX = element instanceof HTMLElement && bounds && element.offsetWidth ? bounds.width / element.offsetWidth : 1;
       const scaleY = element instanceof HTMLElement && bounds && element.offsetHeight ? bounds.height / element.offsetHeight : 1;
-      svg.replaceChildren();
+      svg.replaceChildren(defs);
       const hintText = anchor
         ? "Hover another element to measure · Click to change anchor · Esc to clear"
         : "Measure · Hover to inspect · Click to anchor · Esc to exit";
@@ -117,10 +135,16 @@ export const createMeasureOverlay = (control: HTMLElement): MeasureOverlay => {
       const [marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0] = margin;
       const [borderTop = 0, borderRight = 0, borderBottom = 0, borderLeft = 0] = border;
       const marginFill = "#f59e0b30";
-      box(left, top - Math.max(0, marginTop) * scaleY, width, Math.max(0, marginTop) * scaleY, marginFill);
-      box(right, top, Math.max(0, marginRight) * scaleX, height, marginFill);
-      box(left, bottom, width, Math.max(0, marginBottom) * scaleY, marginFill);
-      box(left - Math.max(0, marginLeft) * scaleX, top, Math.max(0, marginLeft) * scaleX, height, marginFill);
+      const bandFill = (value: number): string =>
+        value < 0 ? `url(#${NEGATIVE_MARGIN_PATTERN_ID})` : marginFill;
+      const topBand = Math.abs(marginTop) * scaleY;
+      const rightBand = Math.abs(marginRight) * scaleX;
+      const bottomBand = Math.abs(marginBottom) * scaleY;
+      const leftBand = Math.abs(marginLeft) * scaleX;
+      box(left, marginTop < 0 ? top : top - topBand, width, topBand, bandFill(marginTop));
+      box(marginRight < 0 ? right - rightBand : right, top, rightBand, height, bandFill(marginRight));
+      box(left, marginBottom < 0 ? bottom - bottomBand : bottom, width, bottomBand, bandFill(marginBottom));
+      box(marginLeft < 0 ? left : left - leftBand, top, leftBand, height, bandFill(marginLeft));
       const innerLeft = left + borderLeft * scaleX;
       const innerTop = top + borderTop * scaleY;
       const paddingBoxWidth = Math.max(0, width - (borderLeft + borderRight) * scaleX);
