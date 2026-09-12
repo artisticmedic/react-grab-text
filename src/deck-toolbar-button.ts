@@ -9,7 +9,7 @@ export const TOOLBAR_BUTTON_WRAPPER_CLASS =
 // Deck sub-controls share one toolbar segment; trailing margin matches a native
 // action wrapper. Internal gap is set inline so it does not depend on Tailwind purge.
 export const DECK_CONTROLS_CLASS =
-  "relative overflow-visible flex items-center shrink-0 mr-1.5";
+  "relative overflow-visible flex items-center shrink-0";
 
 export const DECK_CONTROLS_GAP_PX = 4;
 

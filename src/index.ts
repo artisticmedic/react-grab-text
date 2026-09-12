@@ -1,5 +1,6 @@
 export { createTextPlugin } from "./text-plugin.js";
-export { registerDeckPlugin, registerTextPlugin } from "./register.js";
+export { registerDeckPlugin, registerTextPlugin, registerMeasurePlugin } from "./register.js";
+export { createMeasurePlugin } from "./measure-plugin.js";
 export { getActiveEditSession, startEditSession } from "./edit-session.js";
 export { buildEditPayload } from "./build-edit-payload.js";
 export { copyDeckToClipboard, createDeckPlugin } from "./deck-plugin.js";

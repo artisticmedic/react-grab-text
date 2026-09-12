@@ -22,6 +22,8 @@ import {
   updateDeckItem,
   type DeckItem,
 } from "./deck-store.js";
+import { syncToolbarSegment } from "./utils/sync-toolbar-segment.js";
+import { getToolbarEdge } from "./utils/get-toolbar-edge.js";
 
 export interface DeckUi {
   update: (count: number) => void;
@@ -52,6 +54,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
   controls.setAttribute(DECK_UI_ATTRIBUTE, "controls");
   controls.className = DECK_CONTROLS_CLASS;
   Object.assign(controls.style, { gap: `${DECK_CONTROLS_GAP_PX}px` });
+  const layout = syncToolbarSegment(controls);
 
   const deckAffordance = createDeckAffordance();
   const deckButton = deckAffordance.button;
@@ -82,6 +85,18 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     const rect = anchor.getBoundingClientRect();
     const panelHeight = panel.offsetHeight || 240;
     const gap = 10;
+    const edge = getToolbarEdge(panelToggle);
+    if (edge === "left" || edge === "right") {
+      const toolbarBounds = panelToggle.closest("[data-react-grab-toolbar-panel]")!.getBoundingClientRect();
+      const panelWidth = panel.offsetWidth || 420;
+      const left = edge === "left" ? toolbarBounds.right + gap : toolbarBounds.left - gap - panelWidth;
+      panel.style.left = `${Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12))}px`;
+      panel.style.top = `${Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12))}px`;
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+      panel.style.maxHeight = `${Math.min(360, window.innerHeight - 24)}px`;
+      return;
+    }
     const spaceAbove = rect.top - gap;
     const openUp = spaceAbove >= Math.min(panelHeight, 200) || spaceAbove > window.innerHeight - rect.bottom;
 
@@ -290,6 +305,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       : null;
     const anchor = getToolbarActionAnchor(textButton) ?? getToolbarActionAnchor(fallbackButton);
     if (!anchor?.parentElement) return;
+    layout.attach(anchor);
 
     const existing = root?.querySelector(`[${DECK_UI_ATTRIBUTE}="controls"]`);
     if (existing && existing !== controls) existing.remove();
@@ -331,6 +347,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     },
     destroy: () => {
       window.clearInterval(reattachTimer);
+      layout.destroy();
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
       window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
