@@ -8,6 +8,7 @@ interface ReactGrabTestApi {
   deactivate: () => void;
   isActive: () => boolean;
   getPlugins: () => string[];
+  unregisterPlugin: (name: string) => void;
   getState: () => { targetElement: Element | null };
   copyElement: (element: Element) => Promise<boolean>;
 }

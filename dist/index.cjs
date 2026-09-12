@@ -25,6 +25,7 @@ __export(src_exports, {
   clearDeck: () => clearDeck,
   copyDeckToClipboard: () => copyDeckToClipboard,
   createDeckPlugin: () => createDeckPlugin,
+  createMeasurePlugin: () => createMeasurePlugin,
   createTextPlugin: () => createTextPlugin,
   formatDeck: () => formatDeck,
   getActiveEditSession: () => getActiveEditSession,
@@ -33,6 +34,7 @@ __export(src_exports, {
   isBatchMode: () => isBatchMode,
   queueDeckItemIfBatch: () => queueDeckItemIfBatch,
   registerDeckPlugin: () => registerDeckPlugin,
+  registerMeasurePlugin: () => registerMeasurePlugin,
   registerTextPlugin: () => registerTextPlugin,
   removeDeckItems: () => removeDeckItems,
   setDeckMode: () => setDeckMode,
@@ -975,7 +977,7 @@ var iconDeckCheck = () => createFilledToolbarIcon({
 // src/deck-toolbar-button.ts
 var TOOLBAR_BUTTON_CLASS = "group contain-layout flex items-center justify-center cursor-pointer interactive-scale a11y-hitbox";
 var TOOLBAR_BUTTON_WRAPPER_CLASS = "relative contain-layout flex items-center justify-center shrink-0";
-var DECK_CONTROLS_CLASS = "relative overflow-visible flex items-center shrink-0 mr-1.5";
+var DECK_CONTROLS_CLASS = "relative overflow-visible flex items-center shrink-0";
 var DECK_CONTROLS_GAP_PX = 4;
 var ICON_COLOR_ACTIVE = "text-[var(--rg-text-primary)]";
 var ICON_COLOR_IDLE = "text-[var(--rg-text-secondary)] group-hover:text-[var(--rg-text-primary)] transition-[color] duration-150 ease-drawer";
@@ -1435,6 +1437,42 @@ var createDeckPanelView = () => {
   return { panel, hasFocusedField, setBatchActive, sync };
 };
 
+// src/utils/sync-toolbar-segment.ts
+var syncToolbarSegment = (segment) => {
+  let currentAnchor = null;
+  let currentParent = null;
+  const sync = () => {
+    if (!currentAnchor || !currentParent) return;
+    const anchorStyle = getComputedStyle(currentAnchor);
+    segment.style.flexDirection = getComputedStyle(currentParent).flexDirection;
+    segment.style.marginRight = anchorStyle.marginRight;
+    segment.style.marginBottom = anchorStyle.marginBottom;
+  };
+  const observer = new MutationObserver(sync);
+  return {
+    attach: (anchor) => {
+      if (anchor === currentAnchor && anchor.parentElement === currentParent) return;
+      observer.disconnect();
+      currentAnchor = anchor;
+      currentParent = anchor.parentElement;
+      observer.observe(anchor, { attributes: true, attributeFilter: ["class", "style"] });
+      if (currentParent) observer.observe(currentParent, { attributes: true, attributeFilter: ["class", "style"] });
+      sync();
+    },
+    destroy: () => observer.disconnect()
+  };
+};
+
+// src/utils/get-toolbar-edge.ts
+var getToolbarEdge = (control) => {
+  const panel = control.closest("[data-react-grab-toolbar-panel]");
+  if (!panel) return "bottom";
+  const bounds = panel.getBoundingClientRect();
+  const isVertical = getComputedStyle(panel).flexDirection === "column";
+  if (isVertical) return bounds.left + bounds.width / 2 < window.innerWidth / 2 ? "left" : "right";
+  return bounds.top + bounds.height / 2 < window.innerHeight / 2 ? "top" : "bottom";
+};
+
 // src/deck-ui.ts
 var TOOLBAR_HOST_SELECTOR = "[data-react-grab]";
 var TEXT_ACTION_SELECTOR = '[data-react-grab-toolbar-action="text"]';
@@ -1455,6 +1493,7 @@ var createDeckUi = (onCopyAll) => {
   controls.setAttribute(DECK_UI_ATTRIBUTE, "controls");
   controls.className = DECK_CONTROLS_CLASS;
   Object.assign(controls.style, { gap: `${DECK_CONTROLS_GAP_PX}px` });
+  const layout = syncToolbarSegment(controls);
   const deckAffordance = createDeckAffordance();
   const deckButton = deckAffordance.button;
   const panelMount = createToolbarIconButton(
@@ -1479,6 +1518,18 @@ var createDeckUi = (onCopyAll) => {
     const rect = anchor.getBoundingClientRect();
     const panelHeight = panel.offsetHeight || 240;
     const gap = 10;
+    const edge = getToolbarEdge(panelToggle);
+    if (edge === "left" || edge === "right") {
+      const toolbarBounds = panelToggle.closest("[data-react-grab-toolbar-panel]").getBoundingClientRect();
+      const panelWidth2 = panel.offsetWidth || 420;
+      const left2 = edge === "left" ? toolbarBounds.right + gap : toolbarBounds.left - gap - panelWidth2;
+      panel.style.left = `${Math.max(12, Math.min(left2, window.innerWidth - panelWidth2 - 12))}px`;
+      panel.style.top = `${Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12))}px`;
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+      panel.style.maxHeight = `${Math.min(360, window.innerHeight - 24)}px`;
+      return;
+    }
     const spaceAbove = rect.top - gap;
     const openUp = spaceAbove >= Math.min(panelHeight, 200) || spaceAbove > window.innerHeight - rect.bottom;
     if (openUp) {
@@ -1637,6 +1688,7 @@ var createDeckUi = (onCopyAll) => {
   };
   window.addEventListener("resize", onViewportChange);
   window.addEventListener("scroll", onViewportChange, true);
+  let lastPanelEdge = null;
   let failedAttachAttempts = 0;
   const attach = () => {
     failedAttachAttempts += 1;
@@ -1651,12 +1703,18 @@ var createDeckUi = (onCopyAll) => {
     const fallbackButton = actionButtons?.length ? actionButtons[actionButtons.length - 1] : null;
     const anchor = getToolbarActionAnchor(textButton) ?? getToolbarActionAnchor(fallbackButton);
     if (!anchor?.parentElement) return;
+    layout.attach(anchor);
     const existing = root?.querySelector(`[${DECK_UI_ATTRIBUTE}="controls"]`);
     if (existing && existing !== controls) existing.remove();
     const isCorrectlyPlaced = controls.isConnected && controls.previousElementSibling === anchor && controls.parentElement === anchor.parentElement;
     if (!isCorrectlyPlaced) {
       if (controls.isConnected) controls.remove();
       anchor.insertAdjacentElement("afterend", controls);
+    }
+    const edge = getToolbarEdge(panelToggle);
+    if (edge !== lastPanelEdge) {
+      lastPanelEdge = edge;
+      if (panelOpen) positionPanel();
     }
     failedAttachAttempts = 0;
   };
@@ -1681,6 +1739,7 @@ var createDeckUi = (onCopyAll) => {
     },
     destroy: () => {
       window.clearInterval(reattachTimer);
+      layout.destroy();
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
       window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
@@ -1738,6 +1797,392 @@ var createDeckPlugin = () => ({
   }
 });
 
+// src/measure-geometry.ts
+var axisGaps = (start, end, otherStart, otherEnd) => {
+  if (end <= otherStart) return [[end, otherStart]];
+  if (otherEnd <= start) return [[otherEnd, start]];
+  return [
+    [Math.min(start, otherStart), Math.max(start, otherStart)],
+    [Math.min(end, otherEnd), Math.max(end, otherEnd)]
+  ];
+};
+var measureDistances = (anchor, target) => {
+  const lines = [];
+  const horizontalY = (anchor.top + anchor.bottom) / 2;
+  const verticalX = (anchor.left + anchor.right) / 2;
+  for (const [start, end] of axisGaps(anchor.left, anchor.right, target.left, target.right)) {
+    if (start === void 0 || end === void 0 || start === end) continue;
+    lines.push({ x1: start, y1: horizontalY, x2: end, y2: horizontalY, value: end - start });
+  }
+  for (const [start, end] of axisGaps(anchor.top, anchor.bottom, target.top, target.bottom)) {
+    if (start === void 0 || end === void 0 || start === end) continue;
+    lines.push({ x1: verticalX, y1: start, x2: verticalX, y2: end, value: end - start });
+  }
+  return lines;
+};
+var formatMeasurement = (value) => String(Math.round(value * 10) / 10);
+
+// src/measure-overlay.ts
+var SVG_NS3 = "http://www.w3.org/2000/svg";
+var VIEWPORT_INSET_PX = 8;
+var LABEL_HEIGHT_PX = 22;
+var NEGATIVE_MARGIN_PATTERN_ID = "negative-margin";
+var svgNode = (tag, attributes) => {
+  const element = document.createElementNS(SVG_NS3, tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
+  return element;
+};
+var createMeasureOverlay = (control) => {
+  const host = document.createElement("div");
+  host.setAttribute("data-react-grab-measure", "overlay");
+  host.setAttribute("data-react-grab-ignore", "true");
+  host.style.cssText = `all:initial;position:fixed;inset:0;pointer-events:none;z-index:${OVERLAY_Z_INDEX};`;
+  const root = host.attachShadow({ mode: "open" });
+  const style = document.createElement("style");
+  style.textContent = `
+    :host { --measure-ink: #7c3aed; --measure-anchor: #2563eb; }
+    svg { position:fixed; inset:0; width:100%; height:100%; overflow:hidden; }
+    .details, .hint { position:fixed; box-sizing:border-box; margin:0; color:#fafafa;
+      background:#202024; border:1px solid #414147; border-radius:6px;
+      box-shadow:0 2px 8px #0002; font:12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
+    .details { padding:6px 9px; max-width:calc(100vw - 16px); white-space:pre-wrap; }
+    .hint { width:max-content; padding:5px 10px;
+      max-width:calc(100vw - 16px); text-align:center; }
+    text { font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      font-variant-numeric:tabular-nums; fill:white; }
+  `;
+  const svg = document.createElementNS(SVG_NS3, "svg");
+  svg.setAttribute("aria-hidden", "true");
+  const hatch = svgNode("pattern", {
+    id: NEGATIVE_MARGIN_PATTERN_ID,
+    width: 6,
+    height: 6,
+    patternUnits: "userSpaceOnUse",
+    patternTransform: "rotate(45)"
+  });
+  hatch.append(
+    svgNode("rect", { width: 6, height: 6, fill: "#f59e0b26" }),
+    svgNode("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#f59e0b", "stroke-width": 2, "stroke-opacity": 0.5 })
+  );
+  const defs = svgNode("defs", {});
+  defs.append(hatch);
+  svg.append(defs);
+  const details = document.createElement("div");
+  details.className = "details";
+  details.setAttribute("data-measure-details", "");
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.setAttribute("data-measure-hint", "");
+  hint.setAttribute("role", "status");
+  root.append(style, svg, details, hint);
+  document.body.append(host);
+  let lastSignature = "";
+  let hintBox = { text: "", maxWidth: "", width: 0, height: 0 };
+  const shape = (tag, attributes) => {
+    svg.append(svgNode(tag, attributes));
+  };
+  const box = (left, top, width, height, fill, stroke = "none") => {
+    shape("rect", { x: left, y: top, width: Math.max(0, width), height: Math.max(0, height), fill, stroke });
+  };
+  const line = (x1, y1, x2, y2, color, dashed = false) => {
+    shape("line", { x1, y1, x2, y2, stroke: color, "stroke-width": 1, ...dashed ? { "stroke-dasharray": "3 3" } : {} });
+  };
+  const badge = (x, y, value) => {
+    const width = value.length * 7 + 12;
+    const left = Math.max(VIEWPORT_INSET_PX, Math.min(x - width / 2, innerWidth - width - VIEWPORT_INSET_PX));
+    const top = Math.max(VIEWPORT_INSET_PX, Math.min(y - LABEL_HEIGHT_PX / 2, innerHeight - LABEL_HEIGHT_PX - VIEWPORT_INSET_PX));
+    shape("rect", { x: left, y: top, width, height: LABEL_HEIGHT_PX, rx: 4, fill: "var(--measure-ink)" });
+    const text = document.createElementNS(SVG_NS3, "text");
+    text.setAttribute("x", String(left + width / 2));
+    text.setAttribute("y", String(top + 15));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("data-measure-distance", value);
+    text.textContent = value;
+    svg.append(text);
+  };
+  return {
+    host,
+    render: (target, anchor) => {
+      const element = target ?? anchor;
+      const bounds = element?.getBoundingClientRect();
+      const anchorBounds = anchor?.getBoundingClientRect();
+      const computed = element ? getComputedStyle(element) : null;
+      const padding = ["Top", "Right", "Bottom", "Left"].map((side) => parseFloat(computed?.getPropertyValue(`padding-${side.toLowerCase()}`) ?? "0") || 0);
+      const margin = ["top", "right", "bottom", "left"].map((side) => parseFloat(computed?.getPropertyValue(`margin-${side}`) ?? "0") || 0);
+      const border = ["top", "right", "bottom", "left"].map((side) => parseFloat(computed?.getPropertyValue(`border-${side}-width`) ?? "0") || 0);
+      const name = element ? `${element.localName}${element.id ? `#${element.id}` : ""}` : "";
+      const toolbarBounds = control.closest("[data-react-grab-toolbar-panel]")?.getBoundingClientRect() ?? control.getBoundingClientRect();
+      const edge = getToolbarEdge(control);
+      const signature = JSON.stringify([bounds, anchorBounds, padding, margin, border, name, target === anchor, innerWidth, innerHeight, toolbarBounds, edge]);
+      if (signature === lastSignature) return;
+      lastSignature = signature;
+      const scaleX = element instanceof HTMLElement && bounds && element.offsetWidth ? bounds.width / element.offsetWidth : 1;
+      const scaleY = element instanceof HTMLElement && bounds && element.offsetHeight ? bounds.height / element.offsetHeight : 1;
+      svg.replaceChildren(defs);
+      const hintText = anchor ? "Hover another element to measure \xB7 Click to change anchor \xB7 Esc to clear" : "Measure \xB7 Hover to inspect \xB7 Click to anchor \xB7 Esc to exit";
+      const isVertical = edge === "left" || edge === "right";
+      const hintMaxWidth = `${Math.min(isVertical ? 260 : 600, window.innerWidth - VIEWPORT_INSET_PX * 2)}px`;
+      if (hintText !== hintBox.text || hintMaxWidth !== hintBox.maxWidth) {
+        hint.textContent = hintText;
+        hint.style.maxWidth = hintMaxWidth;
+        hintBox = { text: hintText, maxWidth: hintMaxWidth, width: hint.offsetWidth, height: hint.offsetHeight };
+      }
+      const { width: hintWidth, height: hintHeight } = hintBox;
+      const hintLeft = edge === "left" ? toolbarBounds.right + VIEWPORT_INSET_PX : edge === "right" ? toolbarBounds.left - hintWidth - VIEWPORT_INSET_PX : toolbarBounds.left + (toolbarBounds.width - hintWidth) / 2;
+      const hintTop = edge === "top" ? toolbarBounds.bottom + VIEWPORT_INSET_PX : edge === "bottom" ? toolbarBounds.top - hintHeight - VIEWPORT_INSET_PX : toolbarBounds.top + (toolbarBounds.height - hintHeight) / 2;
+      hint.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(hintLeft, window.innerWidth - hintWidth - VIEWPORT_INSET_PX))}px`;
+      hint.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(hintTop, window.innerHeight - hintHeight - VIEWPORT_INSET_PX))}px`;
+      details.hidden = !bounds;
+      if (!bounds || !element) return;
+      const { left, top, right, bottom, width, height } = bounds;
+      const [paddingTop = 0, paddingRight = 0, paddingBottom = 0, paddingLeft = 0] = padding;
+      const [marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0] = margin;
+      const [borderTop = 0, borderRight = 0, borderBottom = 0, borderLeft = 0] = border;
+      const marginFill = "#f59e0b30";
+      const bandFill = (value) => value < 0 ? `url(#${NEGATIVE_MARGIN_PATTERN_ID})` : marginFill;
+      const topBand = Math.abs(marginTop) * scaleY;
+      const rightBand = Math.abs(marginRight) * scaleX;
+      const bottomBand = Math.abs(marginBottom) * scaleY;
+      const leftBand = Math.abs(marginLeft) * scaleX;
+      box(left, marginTop < 0 ? top : top - topBand, width, topBand, bandFill(marginTop));
+      box(marginRight < 0 ? right - rightBand : right, top, rightBand, height, bandFill(marginRight));
+      box(left, marginBottom < 0 ? bottom - bottomBand : bottom, width, bottomBand, bandFill(marginBottom));
+      box(marginLeft < 0 ? left : left - leftBand, top, leftBand, height, bandFill(marginLeft));
+      const innerLeft = left + borderLeft * scaleX;
+      const innerTop = top + borderTop * scaleY;
+      const paddingBoxWidth = Math.max(0, width - (borderLeft + borderRight) * scaleX);
+      const paddingBoxHeight = Math.max(0, height - (borderTop + borderBottom) * scaleY);
+      const paddingFill = "#22c55e35";
+      box(innerLeft, innerTop, paddingBoxWidth, paddingTop * scaleY, paddingFill);
+      box(right - (borderRight + paddingRight) * scaleX, innerTop, paddingRight * scaleX, paddingBoxHeight, paddingFill);
+      box(innerLeft, bottom - (borderBottom + paddingBottom) * scaleY, paddingBoxWidth, paddingBottom * scaleY, paddingFill);
+      box(innerLeft, innerTop, paddingLeft * scaleX, paddingBoxHeight, paddingFill);
+      box(left, top, width, height, "#7c3aed08", "var(--measure-ink)");
+      for (const x of [left, right]) line(x, 0, x, window.innerHeight, "#7c3aed35", true);
+      for (const y of [top, bottom]) line(0, y, window.innerWidth, y, "#7c3aed35", true);
+      if (anchorBounds && target && target !== anchor) {
+        box(anchorBounds.left, anchorBounds.top, anchorBounds.width, anchorBounds.height, "none", "var(--measure-anchor)");
+        for (const measurement of measureDistances(anchorBounds, bounds)) {
+          const { x1, y1, x2, y2, value } = measurement;
+          const horizontal = y1 === y2;
+          line(x1, y1, x2, y2, "var(--measure-ink)");
+          for (const [x, y] of [[x1, y1], [x2, y2]]) {
+            if (x === void 0 || y === void 0) continue;
+            line(x - (horizontal ? 0 : 3), y - (horizontal ? 3 : 0), x + (horizontal ? 0 : 3), y + (horizontal ? 3 : 0), "var(--measure-ink)");
+          }
+          badge((x1 + x2) / 2, (y1 + y2) / 2, `${formatMeasurement(value)} px`);
+        }
+      }
+      details.textContent = `${target === anchor ? "Anchor \xB7 " : ""}${name}  ${formatMeasurement(width)} \xD7 ${formatMeasurement(height)} px
+Padding  ${padding.map(formatMeasurement).join("  ")}
+Margin    ${margin.map(formatMeasurement).join("  ")}
+Top \xB7 Right \xB7 Bottom \xB7 Left`;
+      const detailsWidth = details.offsetWidth;
+      const detailsHeight = details.offsetHeight;
+      const preferredTop = top - detailsHeight - VIEWPORT_INSET_PX;
+      details.style.left = `${Math.max(VIEWPORT_INSET_PX, Math.min(left, window.innerWidth - detailsWidth - VIEWPORT_INSET_PX))}px`;
+      details.style.top = `${Math.max(VIEWPORT_INSET_PX, Math.min(preferredTop >= VIEWPORT_INSET_PX ? preferredTop : bottom + VIEWPORT_INSET_PX, window.innerHeight - detailsHeight - VIEWPORT_INSET_PX))}px`;
+    },
+    destroy: () => host.remove()
+  };
+};
+
+// src/measure-plugin.ts
+var ATTACH_INTERVAL_MS = 500;
+var FAILED_ATTACH_WARN_AT2 = 20;
+var DRAG_THRESHOLD_PX = 5;
+var TOOL_UI_SELECTOR = "[data-react-grab], [data-react-grab-ignore], [data-react-grab-ignore-events]";
+var createRulerIcon = () => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.pointerEvents = "none";
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", "M3 7h18v10H3z M7 7v5 M11 7v3 M15 7v5 M19 7v3");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.8");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+};
+var isToolEvent = (event) => event.composedPath().some(
+  (node) => node instanceof Element && node.matches(TOOL_UI_SELECTOR)
+);
+var elementAtPoint = (x, y) => {
+  let element = document.elementFromPoint(x, y);
+  while (element?.shadowRoot) {
+    const nested = element.shadowRoot.elementFromPoint(x, y);
+    if (!nested || nested === element) break;
+    element = nested;
+  }
+  if (!element || element.closest(TOOL_UI_SELECTOR) || element === document.documentElement) return null;
+  return element;
+};
+var createMeasurePlugin = () => {
+  let stop = () => {
+  };
+  return {
+    name: "measure",
+    hooks: { onStateChange: (state) => {
+      if (state.isActive) stop();
+    } },
+    setup: (api) => {
+      let overlay = null;
+      let anchor = null;
+      let pointer = null;
+      let frame = 0;
+      let press = null;
+      const icon = createRulerIcon();
+      const { wrapper, button } = createToolbarIconButton("measure", "Measure", icon);
+      button.removeAttribute("data-react-grab-deck-ui");
+      button.setAttribute("data-react-grab-measure", "toggle");
+      button.setAttribute("aria-pressed", "false");
+      const layout = syncToolbarSegment(wrapper);
+      stop = () => {
+        cancelAnimationFrame(frame);
+        overlay?.destroy();
+        overlay = null;
+        anchor = null;
+        pointer = null;
+        button.setAttribute("aria-pressed", "false");
+        applyIconColor(icon, false);
+      };
+      const render = () => {
+        if (!overlay) return;
+        if (anchor && !anchor.isConnected) anchor = null;
+        const target = pointer ? elementAtPoint(pointer.x, pointer.y) : null;
+        overlay.render(target ?? anchor, anchor);
+        frame = requestAnimationFrame(render);
+      };
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (press && press.peak > DRAG_THRESHOLD_PX) {
+          press = null;
+          return;
+        }
+        press = null;
+        if (overlay) {
+          stop();
+          return;
+        }
+        void getActiveEditSession()?.commit();
+        api.deactivate();
+        overlay = createMeasureOverlay(button);
+        button.setAttribute("aria-pressed", "true");
+        applyIconColor(icon, true);
+        render();
+      });
+      const onMove = (event) => {
+        if (press) press.peak = Math.max(press.peak, Math.hypot(event.clientX - press.x, event.clientY - press.y));
+        if (!overlay) return;
+        pointer = isToolEvent(event) ? null : { x: event.clientX, y: event.clientY };
+      };
+      const onDown = (event) => {
+        if (event.composedPath().includes(button)) {
+          press = { x: event.clientX, y: event.clientY, peak: 0 };
+          return;
+        }
+        if (!overlay) return;
+        if (isToolEvent(event)) {
+          stop();
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      const onClick = (event) => {
+        if (!overlay || isToolEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.button !== 0) return;
+        anchor = elementAtPoint(event.clientX, event.clientY);
+        pointer = { x: event.clientX, y: event.clientY };
+      };
+      const onContextMenu = (event) => {
+        if (!overlay || isToolEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      const onPointerUp = (event) => {
+        if (!overlay || isToolEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      const onKey = (event) => {
+        if (!overlay) return;
+        if (event.code === "Escape" || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (anchor) anchor = null;
+          else stop();
+        } else if (event.key === "Tab") stop();
+      };
+      const onLeave = (event) => {
+        if (!event.relatedTarget) pointer = null;
+      };
+      const onCancel = () => {
+        press = null;
+      };
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerdown", onDown, true);
+      window.addEventListener("click", onClick, true);
+      window.addEventListener("auxclick", onClick, true);
+      window.addEventListener("dblclick", onClick, true);
+      window.addEventListener("contextmenu", onContextMenu, true);
+      window.addEventListener("pointerup", onPointerUp, true);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("mouseout", onLeave);
+      window.addEventListener("blur", onCancel);
+      window.addEventListener("pointercancel", onCancel);
+      let failedAttachAttempts = 0;
+      const attach = () => {
+        failedAttachAttempts += 1;
+        if (failedAttachAttempts === FAILED_ATTACH_WARN_AT2) {
+          console.warn(
+            "[react-grab-text] measure found no toolbar anchor after 10s \u2014 host toolbar markup may have changed"
+          );
+        }
+        const root = document.querySelector("[data-react-grab]")?.shadowRoot;
+        const actions = root?.querySelectorAll("[data-react-grab-toolbar-action]");
+        const textAction = root?.querySelector('[data-react-grab-toolbar-action="text"]') ?? (actions?.length ? actions[actions.length - 1] : null);
+        const anchorWrapper = textAction?.parentElement;
+        if (anchorWrapper?.parentElement && wrapper.nextElementSibling !== anchorWrapper) {
+          anchorWrapper.before(wrapper);
+        }
+        if (anchorWrapper) layout.attach(anchorWrapper);
+        if (overlay && !wrapper.isConnected) stop();
+        if (anchorWrapper) failedAttachAttempts = 0;
+      };
+      attach();
+      const timer = window.setInterval(attach, ATTACH_INTERVAL_MS);
+      return {
+        cleanup: () => {
+          stop();
+          window.clearInterval(timer);
+          layout.destroy();
+          window.removeEventListener("pointermove", onMove, true);
+          window.removeEventListener("pointerdown", onDown, true);
+          window.removeEventListener("click", onClick, true);
+          window.removeEventListener("auxclick", onClick, true);
+          window.removeEventListener("dblclick", onClick, true);
+          window.removeEventListener("contextmenu", onContextMenu, true);
+          window.removeEventListener("pointerup", onPointerUp, true);
+          window.removeEventListener("keydown", onKey, true);
+          window.removeEventListener("mouseout", onLeave);
+          window.removeEventListener("blur", onCancel);
+          window.removeEventListener("pointercancel", onCancel);
+          wrapper.remove();
+          return void 0;
+        }
+      };
+    }
+  };
+};
+
 // src/register.ts
 var getReactGrabApi = () => window.__REACT_GRAB__;
 var tryRegister = (createPlugin) => {
@@ -1763,4 +2208,7 @@ var registerTextPlugin = () => {
 };
 var registerDeckPlugin = () => {
   registerWhenReady(createDeckPlugin);
+};
+var registerMeasurePlugin = () => {
+  registerWhenReady(createMeasurePlugin);
 };

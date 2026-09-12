@@ -49,6 +49,20 @@ Single grabs are fenced too (the payload wrapped in a code fence, the comment ab
 
 A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
 
+## Measure (local trial)
+
+The ruler beside Text toggles Measure mode on our fork's palette. Controls follow the palette on all four edges; the Measure hint and Deck panel open toward the page when docked on either side.
+
+- Hover to see the rendered dimensions, padding (green), margins (amber), and edge guides.
+- Click to anchor an element, then hover another for distances in CSS pixels. Overlapping boxes show corresponding edge offsets; containers show the insets on each side.
+- Escape clears the anchor; Escape again exits. Clicking the ruler again, switching to another Grab action, or tabbing also exits.
+
+Measurements follow scrolling and resizing. Page clicks are intercepted while measuring, and no measurements are added to the clipboard or Deck. This is an independent implementation of the measurement interactions, not the VisBug extension or its source.
+
+Run `npm run demo` and open `/measure.html` for the trial with known 32 px and 40 px gaps. The global build registers Measure automatically; module consumers can call `registerMeasurePlugin()` after registering Text. The toolbar attachment currently requires our fork's Text button.
+
+Dimensions and distances use viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements are measured by their enclosing rectangle. Padding and margin labels are computed CSS values in top/right/bottom/left order. A negative margin is drawn inside the border box with a hatched fill, since it takes space rather than reserving it; collapsed margins are still not a direct measure of the visible gap. Closed shadow roots and iframe contents are not inspected. Native top-layer dialogs may cover the overlay.
+
 ## Install
 
 Not on npm yet — both builds below come straight from this repo, pinned to a

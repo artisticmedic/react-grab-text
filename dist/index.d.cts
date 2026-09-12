@@ -55,6 +55,9 @@ declare const createTextPlugin: () => ReactGrabPlugin;
 
 declare const registerTextPlugin: () => void;
 declare const registerDeckPlugin: () => void;
+declare const registerMeasurePlugin: () => void;
+
+declare const createMeasurePlugin: () => ReactGrabPlugin;
 
 interface Position {
     x: number;
@@ -144,4 +147,4 @@ declare const queueDeckItemIfBatch: (content: string) => DeckItem | null;
 
 declare const formatDeck: (items: readonly DeckItem[]) => string;
 
-export { type DeckCopyResult, type DeckItem, type DeckMode, type EditResult, type EditSessionHandle, type EditSessionOptions, type EditSource, type Position, type ReactGrabActionContext, type ReactGrabApi, type ReactGrabPlugin, addDeckItem, buildEditPayload, clearDeck, copyDeckToClipboard, createDeckPlugin, createTextPlugin, formatDeck, getActiveEditSession, getDeckItems, getDeckMode, isBatchMode, queueDeckItemIfBatch, registerDeckPlugin, registerTextPlugin, removeDeckItems, setDeckMode, startEditSession, subscribeDeck, subscribeDeckMode, toggleDeckMode };
+export { type DeckCopyResult, type DeckItem, type DeckMode, type EditResult, type EditSessionHandle, type EditSessionOptions, type EditSource, type Position, type ReactGrabActionContext, type ReactGrabApi, type ReactGrabPlugin, addDeckItem, buildEditPayload, clearDeck, copyDeckToClipboard, createDeckPlugin, createMeasurePlugin, createTextPlugin, formatDeck, getActiveEditSession, getDeckItems, getDeckMode, isBatchMode, queueDeckItemIfBatch, registerDeckPlugin, registerMeasurePlugin, registerTextPlugin, removeDeckItems, setDeckMode, startEditSession, subscribeDeck, subscribeDeckMode, toggleDeckMode };

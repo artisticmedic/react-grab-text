@@ -1,0 +1,9 @@
+.measure-page { max-width: 880px; padding-top: 64px; gap: 40px; }
+.measure-page header { max-width: 620px; }
+.measure-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+.measure-card { padding: 24px; background: white; border-radius: 12px; box-shadow: 0 0 0 1px #18181b12, 0 3px 12px #18181b04; display: flex; flex-direction: column; gap: 16px; }
+.measure-card p { font-size: 14px; }
+.measure-card button { margin-top: auto; font-size: 14px; }
+.measure-nest { padding: 40px; background: #ecebf1; border-radius: 16px; }
+.measure-child { padding: 24px; background: white; border-radius: 8px; display: grid; gap: 12px; }
+@media (max-width: 640px) { .measure-pair { grid-template-columns: 1fr; } .measure-page { padding-top: 32px; } }

@@ -1,6 +1,7 @@
 import { createDeckPlugin } from "./deck-plugin.js";
 import type { ReactGrabApi, ReactGrabPlugin } from "./react-grab-types.js";
 import { createTextPlugin } from "./text-plugin.js";
+import { createMeasurePlugin } from "./measure-plugin.js";
 
 const getReactGrabApi = (): ReactGrabApi | undefined =>
   (window as Window & { __REACT_GRAB__?: ReactGrabApi }).__REACT_GRAB__;
@@ -34,4 +35,8 @@ export const registerTextPlugin = (): void => {
 
 export const registerDeckPlugin = (): void => {
   registerWhenReady(createDeckPlugin);
+};
+
+export const registerMeasurePlugin = (): void => {
+  registerWhenReady(createMeasurePlugin);
 };
