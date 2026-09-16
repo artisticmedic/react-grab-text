@@ -6,7 +6,7 @@ a fork of [`aidenybai/react-grab`](https://github.com/aidenybai/react-grab).
 | | |
 |---|---|
 | Branch | `flightcast/toolbar-plugin-actions` |
-| Commit | `adb8c48` |
+| Commit | `04c46cc` |
 | Base | `react-grab@0.1.49` |
 | Built with | `pnpm --filter react-grab build` → `packages/react-grab/dist/index.global.js` |
 
