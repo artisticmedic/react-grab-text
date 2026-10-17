@@ -6,23 +6,28 @@ a fork of [`aidenybai/react-grab`](https://github.com/aidenybai/react-grab).
 | | |
 |---|---|
 | Branch | `flightcast/toolbar-plugin-actions` |
-| Commit | `adb8c48` |
+| Commit | `8d25f7b3` |
 | Base | `react-grab@0.1.49` |
 | Built with | `pnpm --filter react-grab build` → `packages/react-grab/dist/index.global.js` |
 
-## Why it is committed rather than installed
+## What the fork changes
 
-The demo and the e2e suite need two things the published `react-grab@0.2.0`
-does not have:
+The plugins don't need it. Text, Deck, and Measure run on npm's
+`react-grab@0.2.0`, and the demo and e2e suite use that by default. The fork
+changes the palette toolbar:
 
-- **A toolbar button per registered plugin action.** The Deck attaches its
-  controls next to the Text action by querying `[data-react-grab-toolbar-action]`
-  inside react-grab's shadow root. Without the fork there is no anchor and the
-  Deck never mounts.
-- **The Style pill.** Dropped from the palette toolbar in 0.2.0.
+- **A button per registered plugin action**, so Text gets its own toolbar
+  button. On npm's react-grab, Text is reachable from the context menu, the
+  `t` key, or the toolbar's default action.
+- **Comment as the primary toolbar action** in place of Copy.
+- **The Style pill**, dropped from the palette in 0.2.0, with arrow keys that
+  step a value along the design-token scale.
 
-Reading it from a gitignored directory made the repo unbuildable by anyone
-else, so it lives here instead. Rebuild by checking out the commit above and
-copying `packages/react-grab/dist/index.global.js` over this file.
+## Why it is committed
+
+CI runs the suite a second time against this build
+(`REACT_GRAB_BUILD=fork npm test`) so the toolbar attachment keeps working on
+both palettes. Rebuild by checking out the commit above and copying
+`packages/react-grab/dist/index.global.js` over this file.
 
 Upstream is MIT; so is this.

@@ -10,12 +10,16 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // bundler does — plain <script src>. Both live outside the demo root (one in
 // node_modules, one in dist), so serve them raw and untransformed at stable
 // URLs rather than putting machine-specific /@fs/ paths in the HTML.
+// npm's react-grab by default, since that is what consumers install.
+// REACT_GRAB_BUILD=fork swaps in the committed fork build (vendor/README.md),
+// which CI also runs so the toolbar attachment holds on both palettes.
+const REACT_GRAB_IIFE =
+  process.env.REACT_GRAB_BUILD === "fork"
+    ? "vendor/react-grab.global.js"
+    : "node_modules/react-grab/dist/index.global.js";
+
 const IIFE_BUNDLES: Record<string, string> = {
-  // Checked into vendor/ rather than read from node_modules: the demo needs the
-  // fork build (0.1.49 + a toolbar button per registered plugin action + the
-  // Style pill), and npm's 0.2.0 drops the palette toolbar the Deck attaches to.
-  // Committing it is what lets a fresh clone — and CI — run the suite at all.
-  "/vendor/react-grab.iife.js": "vendor/react-grab.global.js",
+  "/vendor/react-grab.iife.js": REACT_GRAB_IIFE,
   "/vendor/react-grab-text.iife.js": "dist/global.global.js",
 };
 

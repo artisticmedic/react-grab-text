@@ -1,6 +1,6 @@
 # react-grab-text
 
-Text and Deck tools for [React Grab](https://github.com/aidenybai/react-grab). Click text on your running app, edit it inline, and copy the edit out as an agent-ready payload with source context. Grabs accumulate in a deck that copies out as one numbered, separated block.
+Text, Deck, and Measure tools for [React Grab](https://github.com/aidenybai/react-grab). Click text on your running app, edit it inline, and copy the edit out as an agent-ready payload with source context. Grabs accumulate in a deck that copies out as one numbered, separated block. A ruler reads sizes, padding, margins, and the gaps between elements.
 
 React Grab's palette selects elements and copies context *about* them. This plugin adds the missing copyediting move: change the words in place, see the edit live on the page, and hand the before/after — with component name and file location — straight to a coding agent.
 
@@ -25,14 +25,14 @@ The edit stays applied on the page so you can read it in context; a refresh rese
 
 React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint in **batch mode**: every successful grab (copy or text edit) also lands in a queue, and one action copies the whole queue as a single structured block.
 
-**Batch mode is on by default** — collecting is the point of the deck, and a review pass that silently dropped its first few grabs would cost more than one click to turn it off. **Single mode** sends each grab to the clipboard only and keeps the deck empty and invisible; switch with the ◫ button next to the Text action.
+**Batch mode is on by default** — collecting is the point of the deck, and a review pass that silently dropped its first few grabs would cost more than one click to turn it off. **Single mode** sends each grab to the clipboard only and keeps the deck empty and invisible; switch with the ◫ button in the toolbar.
 
 1. Grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
 2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
 3. Click ▾ to open the deck panel, edit items in place, remove individual items with ×, or clear all.
 4. The panel footer holds the batch-mode switch. The toolbar affordance becomes copy-all once anything is queued, so the panel is where you turn batch mode off without first emptying the deck. Switching to single mode keeps the queue — it only stops new grabs joining it.
 
-```
+````
 1.
 this label is misleading
 ```
@@ -43,15 +43,15 @@ this label is misleading
 ```
 [<h1 data-testid="headline">Welcome</h1> in Header (at src/components/Header.tsx:8)]
 ```
-```
+````
 
 Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text edits queue in batch mode alongside copy grabs.
 
 A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
 
-## Measure (local trial)
+## Measure
 
-The ruler beside Text toggles Measure mode on our fork's palette. Controls follow the palette on all four edges; the Measure hint and Deck panel open toward the page when docked on either side.
+The ruler in the React Grab toolbar toggles Measure mode. Controls follow the palette on all four edges; the Measure hint and Deck panel open toward the page when docked on either side.
 
 - Hover to see the rendered dimensions, padding (green), margins (amber), and edge guides.
 - Click to anchor an element, then hover another for distances in CSS pixels. Overlapping boxes show corresponding edge offsets; containers show the insets on each side.
@@ -59,41 +59,41 @@ The ruler beside Text toggles Measure mode on our fork's palette. Controls follo
 
 Measurements follow scrolling and resizing. Page clicks are intercepted while measuring, and no measurements are added to the clipboard or Deck. This is an independent implementation of the measurement interactions, not the VisBug extension or its source.
 
-Run `npm run demo` and open `/measure.html` for the trial with known 32 px and 40 px gaps. The global build registers Measure automatically; module consumers can call `registerMeasurePlugin()` after registering Text. The toolbar attachment currently requires our fork's Text button.
+Run `npm run demo` and open `/measure.html` for a page with known 32 px and 40 px gaps. The script-tag build registers Measure automatically; module consumers call `registerMeasurePlugin()`.
 
 Dimensions and distances use viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements are measured by their enclosing rectangle. Padding and margin labels are computed CSS values in top/right/bottom/left order. A negative margin is drawn inside the border box with a hatched fill, since it takes space rather than reserving it; collapsed margins are still not a direct measure of the visible gap. Closed shadow roots and iframe contents are not inspected. Native top-layer dialogs may cover the overlay.
 
 ## Install
 
-Not on npm yet — both builds below come straight from this repo, pinned to a
-tag so the URL can't drift under you.
-
 Script tag, next to React Grab's own (dev only):
 
 ```html
 <script src="https://unpkg.com/react-grab@0.2.0/dist/index.global.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/artisticmedic/react-grab-text@v0.2.0/dist/global.global.js"></script>
+<script src="https://unpkg.com/react-grab-text@0.3.0/dist/global.global.js"></script>
 ```
 
 Or as a module, after React Grab is loaded:
 
 ```bash
-npm install react-grab github:artisticmedic/react-grab-text#v0.2.0
+npm install react-grab react-grab-text
 ```
 
 ```ts
 import "react-grab";
-import { registerDeckPlugin, registerTextPlugin } from "react-grab-text";
+import { registerDeckPlugin, registerMeasurePlugin, registerTextPlugin } from "react-grab-text";
 
 registerTextPlugin();
 registerDeckPlugin();
+registerMeasurePlugin();
 ```
 
-Registration is race-free in both directions: if React Grab isn't initialized yet, the plugins wait for its `react-grab:init` event. The script-tag build registers both tools; module consumers register each independently.
+Registration is race-free in both directions: if React Grab isn't initialized yet, the plugins wait for its `react-grab:init` event. The script-tag build registers all three tools; module consumers register each independently.
 
 ## Compatibility
 
 Verified against `react-grab@0.1.49` (the last release with the Style panel; live-tested inside a Next.js app) and `react-grab@0.2.0` (e2e suite). On 0.1.49 the Text row appears in the element context menu alongside Copy / Style / Comment / Open; on 0.2.0 it also appears in the toolbar's action menu and can be set as the toolbar's default action. Next.js app-router file paths are decoded (`(routes)`, `[slug]`) so payload paths exist on disk as written.
+
+The e2e suite also runs against [a fork of React Grab](vendor/README.md) that gives each plugin action its own toolbar button, so Text gets one too. The plugins don't need the fork.
 
 One 0.1.49 caveat: it never normalizes a persisted toolbar `defaultAction`, so if `"text"` was stored (by a 0.2.0 session on the same origin) and the plugin is later absent, the stale id sticks — clear the `react-grab-toolbar-state` localStorage key if the toolbar misbehaves. 0.2.0 self-heals this.
 
@@ -110,5 +110,6 @@ One 0.1.49 caveat: it never normalizes a persisted toolbar `defaultAction`, so i
 npm install
 npm run build      # dist: ESM + CJS + IIFE global
 npm run demo       # vite playground
-npm test           # playwright e2e
+npm test           # playwright e2e against npm's react-grab
+REACT_GRAB_BUILD=fork npm test   # ...against the fork build in vendor/
 ```

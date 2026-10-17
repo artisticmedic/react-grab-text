@@ -8,6 +8,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react-grab-build: [stock, fork]
+    name: test (${{ matrix.react-grab-build }} react-grab)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,3 +26,4 @@ jobs:
       - run: npx playwright test
         env:
           PLAYWRIGHT_CHROMIUM_CHANNEL: chromium
+          REACT_GRAB_BUILD: ${{ matrix.react-grab-build }}
