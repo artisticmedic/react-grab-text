@@ -14,9 +14,12 @@ test("Measure and a numbered Deck follow the palette around all four edges", asy
   await expect(page.locator(`${DECK} [data-react-grab-deck-face="count"]`)).toHaveText("12");
   await expect(page.locator(`${DECK} [data-react-grab-deck-face="stack"]`)).toHaveCSS("opacity", "0");
 
+  // Any built-in action button drags the palette; the first one exists on both
+  // stock react-grab and the fork, whose primary button differs.
+  const paletteButton = page.locator("[data-react-grab-toolbar-action]").first();
   for (const edge of ["left", "right", "top", "bottom"] as const) {
-    await page.locator('[data-react-grab-toolbar-action="comment"]').hover();
-    const dragHandle = (await page.locator('[data-react-grab-toolbar-action="comment"]').boundingBox())!;
+    await paletteButton.hover();
+    const dragHandle = (await paletteButton.boundingBox())!;
     const viewport = page.viewportSize()!;
     const destination = {
       left: { x: 16, y: viewport.height / 2 },
