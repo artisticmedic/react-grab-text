@@ -1,6 +1,6 @@
 {
   "name": "react-grab-text",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Text, Deck, and Measure tools for React Grab — edit text inline, batch grabs into one structured copy, and measure spacing",
   "keywords": [
     "react-grab",
