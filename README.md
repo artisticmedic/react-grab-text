@@ -1,15 +1,15 @@
 # react-grab-text
 
-Text, Deck, and Measure tools for [React Grab](https://github.com/aidenybai/react-grab). Click text on your running app, edit it inline, and copy the edit out as an agent-ready payload with source context. Grabs accumulate in a deck that copies out as one numbered, separated block. A ruler reads sizes, padding, margins, and the gaps between elements.
+Text, Deck, and Measure tools for [React Grab](https://github.com/aidenybai/react-grab). Click text in your running app, edit it in place, and copy a payload with source context for your coding agent. Collect grabs in a deck and copy them as one numbered block with separators. Use the ruler to read sizes, padding, margins, and gaps between elements.
 
-React Grab's palette selects elements and copies context *about* them. This plugin adds the missing copyediting move: change the words in place, see the edit live on the page, and hand the before/after — with component name and file location — straight to a coding agent.
+React Grab's palette selects elements and copies context *about* them. This plugin lets you change the words and see your edits on the page. You can then give a coding agent the before/after with the component name and file location.
 
 ## How it works
 
-1. Activate React Grab and run the **Text** action on an element (context menu, the `t` key while hovering, or set Text as the toolbar's default action).
-2. The element itself becomes editable in place. Type the new copy.
-3. `Enter` saves; `Shift+Enter` inserts a line break; `Esc` cancels and restores the original; clicking elsewhere saves.
-4. On save, the clipboard gets a payload in React Grab's native grammar:
+1. Activate React Grab and run the **Text** action on an element. Use the context menu, press the `t` key while hovering, or set Text as the toolbar's default action.
+2. Type your new copy in the element.
+3. `Enter` saves, `Shift+Enter` inserts a line break, and `Esc` cancels and restores the original. Clicking elsewhere also saves.
+4. Saving copies a payload to the clipboard in React Grab's native grammar:
 
 ```
 Edit this text in the source: make the rendered text read as AFTER instead of BEFORE. Preserve surrounding markup, interpolations, and formatting.
@@ -19,18 +19,18 @@ BEFORE: "Welcome back"
 AFTER: "Welcome home"
 ```
 
-The edit stays applied on the page so you can read it in context; a refresh resets it. Paste the payload into your agent to make it permanent.
+The edit stays on the page until you refresh, so you can read it in context. Paste the payload into your agent to make the change permanent.
 
 ## Deck
 
-React Grab's native flow replaces the clipboard on every grab, so a review pass with several requests means one paste per request. The deck removes that constraint in **batch mode**: every successful grab (copy or text edit) also lands in a queue, and one action copies the whole queue as a single structured block.
+React Grab replaces the clipboard with each grab. If you're reviewing several changes, that means a separate paste for each request. In **batch mode**, the deck also queues every successful grab, including text edits, so you can copy them all as one structured block.
 
-**Batch mode is on by default** — collecting is the point of the deck, and a review pass that silently dropped its first few grabs would cost more than one click to turn it off. **Single mode** sends each grab to the clipboard only and keeps the deck empty and invisible; switch with the ◫ button in the toolbar.
+**Batch mode is on by default**, so the deck collects grabs from the start of a review. In **Single mode**, each grab goes only to the clipboard. The deck stays hidden while it's empty. Switch with the ◫ button in the toolbar.
 
-1. Grab elements as usual and add comments where wanted. Each grab still reaches the clipboard individually — a count appears in the toolbar (hidden in single mode and while the deck is empty).
-2. Click the count to copy every queued item as a numbered, `--`-separated block and flush the deck. A failed clipboard write keeps the queue intact.
-3. Click ▾ to open the deck panel, edit items in place, remove individual items with ×, or clear all.
-4. The panel footer holds the batch-mode switch. The toolbar affordance becomes copy-all once anything is queued, so the panel is where you turn batch mode off without first emptying the deck. Switching to single mode keeps the queue — it only stops new grabs joining it.
+1. Grab elements as usual and add comments where needed. Each grab still reaches the clipboard on its own, and the toolbar shows a count when the deck has items.
+2. Click the count to copy all queued items as a numbered, `--`-separated block and empty the deck. If the clipboard write fails, the queue stays intact.
+3. Click ▾ to open the deck panel. Edit items in place, remove one with ×, or clear all.
+4. The panel footer has the batch-mode switch. When items are queued, the toolbar button copies them all, so use the panel to switch modes without emptying the deck. Single mode keeps the queue and stops new grabs from joining it.
 
 ````
 1.
@@ -45,34 +45,34 @@ this label is misleading
 ```
 ````
 
-Single grabs are fenced too (the payload wrapped in a code fence, the comment above it), so individual pastes stay distinguishable inside a longer prompt. The deck persists in `sessionStorage`: it survives reloads and navigation within the tab, holds the most recent 50 grabs, and starts empty in a new tab. Text edits queue in batch mode alongside copy grabs.
+Single grabs are fenced too, with the payload in a code fence and the comment above it, so you can tell individual pastes apart in a longer prompt. The deck uses `sessionStorage` to survive reloads and navigation within the tab. It holds the most recent 50 grabs and starts empty in a new tab. Text edits queue alongside copy grabs in batch mode.
 
-A `DeckCopyResult` (`{ itemCount, output, didCopy }`) is dispatched as a `react-grab-deck:copy` CustomEvent on `window`; `react-grab-deck:change` fires on every queue mutation.
+The plugin dispatches a `DeckCopyResult` (`{ itemCount, output, didCopy }`) as a `react-grab-deck:copy` CustomEvent on `window`. `react-grab-deck:change` fires on every queue change.
 
 ## Measure
 
-The ruler in the React Grab toolbar toggles Measure mode. Controls follow the palette on all four edges; the Measure hint and Deck panel open toward the page when docked on either side.
+Click the ruler in the React Grab toolbar to toggle Measure mode. Controls follow the palette on all four edges. The Measure hint and Deck panel open toward the page when the palette is docked on either side.
 
-- Hover to see the rendered dimensions, padding (green), margins (amber), and edge guides.
-- Click to anchor an element, then hover another for distances in CSS pixels. Overlapping boxes show corresponding edge offsets; containers show the insets on each side.
-- Escape clears the anchor; Escape again exits. Clicking the ruler again, switching to another Grab action, or tabbing also exits.
+- Hover to see rendered dimensions, padding (green), margins (amber), and edge guides.
+- Click to anchor an element, then hover another to see distances in CSS pixels. Overlapping boxes show corresponding edge offsets; containers show the insets on each side.
+- Press Escape to clear the anchor; press it again to exit. Clicking the ruler again, switching to another Grab action, or tabbing also exits.
 
-Measurements follow scrolling and resizing. Page clicks are intercepted while measuring, and no measurements are added to the clipboard or Deck. This is an independent implementation of the measurement interactions, not the VisBug extension or its source.
+Measurements update as you scroll and resize. Measure intercepts page clicks and adds nothing to the clipboard or Deck. This implementation is independent of the VisBug extension and its source.
 
 Run `npm run demo` and open `/measure.html` for a page with known 32 px and 40 px gaps. The script-tag build registers Measure automatically; module consumers call `registerMeasurePlugin()`.
 
-Dimensions and distances use viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements are measured by their enclosing rectangle. Padding and margin labels are computed CSS values in top/right/bottom/left order. A negative margin is drawn inside the border box with a hatched fill, since it takes space rather than reserving it; collapsed margins are still not a direct measure of the visible gap. Closed shadow roots and iframe contents are not inspected. Native top-layer dialogs may cover the overlay.
+Dimensions and distances come from viewport-aligned bounding rectangles. Rotated elements and multi-line inline elements use their enclosing rectangle. Padding and margin labels show computed CSS values in top/right/bottom/left order. Negative margins appear inside the border box with a hatched fill because they take space rather than reserve it. Collapsed margins still aren't a direct measure of the visible gap. The tool doesn't inspect closed shadow roots or iframe contents. Native top-layer dialogs may cover the overlay.
 
 ## Install
 
-Script tag, next to React Grab's own (dev only):
+Add the script tag next to React Grab's own (dev only):
 
 ```html
 <script src="https://unpkg.com/react-grab@0.2.0/dist/index.global.js"></script>
 <script src="https://unpkg.com/react-grab-text@0.3.0/dist/global.global.js"></script>
 ```
 
-Or as a module, after React Grab is loaded:
+Or use it as a module after React Grab has loaded:
 
 ```bash
 npm install react-grab react-grab-text
@@ -87,22 +87,22 @@ registerDeckPlugin();
 registerMeasurePlugin();
 ```
 
-Registration is race-free in both directions: if React Grab isn't initialized yet, the plugins wait for its `react-grab:init` event. The script-tag build registers all three tools; module consumers register each independently.
+Register the plugins before or after React Grab initializes. They wait for its `react-grab:init` event if needed. The script-tag build registers all three tools; module consumers register each one separately.
 
 ## Compatibility
 
-Verified against `react-grab@0.1.49` (the last release with the Style panel; live-tested inside a Next.js app) and `react-grab@0.2.0` (e2e suite). On 0.1.49 the Text row appears in the element context menu alongside Copy / Style / Comment / Open; on 0.2.0 it also appears in the toolbar's action menu and can be set as the toolbar's default action. Next.js app-router file paths are decoded (`(routes)`, `[slug]`) so payload paths exist on disk as written.
+Tested against `react-grab@0.1.49` (the last release with the Style panel, run live in a Next.js app) and `react-grab@0.2.0` (e2e suite). On 0.1.49, the Text row appears in the element context menu alongside Copy / Style / Comment / Open. On 0.2.0, it also appears in the toolbar's action menu and can be set as the toolbar's default action. Next.js app-router file paths are decoded (`(routes)`, `[slug]`) so payload paths match the paths on disk.
 
-The e2e suite also runs against [a fork of React Grab](vendor/README.md) that gives each plugin action its own toolbar button, so Text gets one too. The plugins don't need the fork.
+The e2e suite also runs against [a fork of React Grab](vendor/README.md) with a toolbar button for each plugin action, including Text. The plugins work without the fork.
 
-One 0.1.49 caveat: it never normalizes a persisted toolbar `defaultAction`, so if `"text"` was stored (by a 0.2.0 session on the same origin) and the plugin is later absent, the stale id sticks — clear the `react-grab-toolbar-state` localStorage key if the toolbar misbehaves. 0.2.0 self-heals this.
+On 0.1.49, a persisted toolbar `defaultAction` isn't normalized. If `"text"` was stored by a 0.2.0 session on the same origin and the plugin is later absent, the stale id remains. Clear the `react-grab-toolbar-state` localStorage key if the toolbar misbehaves. 0.2.0 handles this automatically.
 
 ## Notes
 
-- The action only enables on elements with visible text; form controls and media are excluded.
-- The page is live while you edit (React Grab's freeze is released), so a component that re-renders its own text mid-edit can repaint it; the committed payload is still built from what you typed.
-- Editing replaces the element's text nodes, so React stops updating that element's text afterwards (its fiber points at the old nodes). Fine for copyediting static strings; refresh to reattach live text like counters.
-- An `EditResult` (`{ before, after, payload, didCopy }`) is also dispatched as a `react-grab-text:edit` CustomEvent on `window` for tooling.
+- The action is available only on elements with visible text; form controls and media are excluded.
+- The page stays live while you edit because React Grab's freeze is released. A component that re-renders its own text mid-edit can repaint it; the committed payload still uses what you typed.
+- Editing replaces the element's text nodes, so React stops updating that element's text afterwards. Its fiber still points at the old nodes. This is fine for static strings; refresh to reattach live text like counters.
+- For tooling, the plugin also dispatches an `EditResult` (`{ before, after, payload, didCopy }`) as a `react-grab-text:edit` CustomEvent on `window`.
 
 ## Develop
 
