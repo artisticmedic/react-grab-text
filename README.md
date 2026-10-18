@@ -69,7 +69,7 @@ Add the script tag next to React Grab's own (dev only):
 
 ```html
 <script src="https://unpkg.com/react-grab@0.2.0/dist/index.global.js"></script>
-<script src="https://unpkg.com/react-grab-text@0.3.0/dist/global.global.js"></script>
+<script src="https://unpkg.com/react-grab-text@0.3.1/dist/global.global.js"></script>
 ```
 
 Or use it as a module after React Grab has loaded:
