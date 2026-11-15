@@ -14,6 +14,8 @@ const PANEL_MODE_TOGGLE = '[data-react-grab-deck-ui="panel-mode-toggle"]';
 const PANEL_SUMMARY = '[data-react-grab-deck-ui="panel-summary"]';
 const PANEL_PREVIEW = '[data-react-grab-deck-ui="panel-preview"]';
 const PANEL_COPY_ALL = '[data-react-grab-deck-ui="copy-all"]';
+const PANEL_BACK = '[data-react-grab-deck-ui="panel-back"]';
+const PANEL_ITEM = '[data-react-grab-deck-ui="panel-item"]';
 
 const clickDeckAffordance = async (demo: DemoPageObject): Promise<void> => {
   await demo.page.evaluate((attributeName) => {
@@ -291,6 +293,45 @@ test.describe("deck", () => {
     const clipboard = await demo.readClipboard();
     expect(clipboard).toMatch(/^1\.\n```\n\[<h1 data-testid="headline">/);
     expect(clipboard).toContain("\n--\n2.\n```\n");
+  });
+
+  test("an open item edits alone and the header leads back to the list", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await copyGrab(demo, TAGLINE, 2);
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL_BACK)).toBeHidden();
+
+    await demo.page.locator(PANEL_SUMMARY).nth(1).click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toBeFocused();
+    await expect(demo.page.locator(PANEL_ITEM).first()).toBeHidden();
+    await expect(demo.page.locator('[data-react-grab-deck-ui="panel-position"]')).toHaveText("2 of 2");
+
+    await demo.page.locator(PANEL_BACK).click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toHaveCount(0);
+    await expect(demo.page.locator(PANEL_ITEM)).toHaveCount(2);
+    await expect(demo.page.locator(PANEL_ITEM).first()).toBeVisible();
+    await expect(demo.page.locator(PANEL_SUMMARY).nth(1)).toBeFocused();
+
+    // Escape takes the same way back.
+    await demo.page.locator(PANEL_SUMMARY).first().click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toBeFocused();
+    await demo.page.keyboard.press("Escape");
+    await expect(demo.page.locator(PANEL_PREVIEW)).toHaveCount(0);
+    await expect(demo.page.locator(PANEL_SUMMARY).first()).toBeFocused();
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+  });
+
+  test("opening the deck panel closes the React Grab menu that was open", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await demo.activate();
+    await demo.page.locator(TAGLINE).hover({ force: true });
+    await demo.rightClickTarget(TAGLINE);
+
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+    await expect
+      .poll(async () => (await demo.getContextMenuRow("Copy")).isPresent)
+      .toBe(false);
   });
 
   test("the deck panel closes on an outside click", async ({ demo }) => {

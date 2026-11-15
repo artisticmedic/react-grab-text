@@ -1359,32 +1359,42 @@ var STYLE_ELEMENT_ID2 = "react-grab-deck-panel-styles";
 var SVG_NS4 = "http://www.w3.org/2000/svg";
 var part = (name) => `[${DECK_UI_ATTRIBUTE}="${name}"]`;
 var P = part("panel");
+var PANEL_WIDTH_PX = 320;
+var PANEL_ENTER_MS = 220;
+var PANEL_EXIT_MS = 120;
+var HIGHLIGHT_MS = 75;
 var PANEL_CSS = `
 ${P} *:not(svg, svg *) { all: revert; }
 ${P} {
   position: fixed;
   flex-direction: column;
   box-sizing: border-box;
-  min-width: min(360px, calc(100vw - 24px));
-  max-width: min(400px, calc(100vw - 24px));
+  width: min(${PANEL_WIDTH_PX}px, calc(100vw - 24px));
   max-height: min(400px, 52vh);
   overflow: hidden;
   border-radius: 14px;
   corner-shape: superellipse(1.25);
   background: ${rg.panelBg};
   color: ${rg.text};
-  box-shadow: ${rg.shadow};
+  filter: drop-shadow(${rg.shadow});
   font: 500 13px/16px ${rg.font};
   letter-spacing: normal;
   text-align: left;
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
   z-index: 2147483645;
-  animation: react-grab-deck-panel-in 180ms ${rg.easeDrawer};
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition: opacity ${PANEL_EXIT_MS}ms ${rg.easeDrawer}, transform ${PANEL_EXIT_MS}ms ${rg.easeDrawer};
 }
-@keyframes react-grab-deck-panel-in {
-  from { opacity: 0; transform: scale(0.98); }
+${P}[data-state="open"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity ${PANEL_ENTER_MS}ms ${rg.easeSpring}, transform ${PANEL_ENTER_MS}ms ${rg.easeSpring};
 }
+${P} [hidden] { display: none !important; }
 ${P} *, ${P} *::before, ${P} *::after { box-sizing: border-box; }
 ${P} button {
   appearance: none;
@@ -1410,20 +1420,30 @@ ${P} ${part("panel-header")} {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 4px 4px 8px;
+  height: 28px;
+  padding: 0 4px 0 8px;
 }
 ${P} ${part("panel-title")} { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 ${P} ${part("panel-count")} { color: ${rg.textMuted}; font-variant-numeric: tabular-nums; }
-${P} ${part("clear-all")} {
+${P} ${part("clear-all")},
+${P} ${part("panel-back")} {
   height: 20px;
   padding: 0 6px;
   border-radius: 6px;
   color: ${rg.textMuted};
   transition: color 150ms ease-out, background-color 150ms ease-out;
 }
-${P} ${part("clear-all")}:hover { color: ${rg.text}; background: ${rg.surfaceHover}; }
+${P} ${part("panel-back")} { gap: 2px; margin-left: -4px; padding: 0 6px 0 2px; color: ${rg.text}; }
+${P} ${part("clear-all")}:hover,
+${P} ${part("panel-back")}:hover { color: ${rg.text}; background: ${rg.surfaceHover}; }
+${P} ${part("panel-position")} {
+  padding-right: 4px;
+  color: ${rg.textMuted};
+  font-variant-numeric: tabular-nums;
+}
 
 ${P} ${part("panel-list")} {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1432,22 +1452,29 @@ ${P} ${part("panel-list")} {
   scrollbar-width: thin;
   scrollbar-color: ${rg.borderButton} transparent;
 }
+${P} ${part("panel-highlight")} {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: ${rg.surfaceHover};
+  opacity: 0;
+  pointer-events: none;
+  transition: top ${HIGHLIGHT_MS}ms ease-out, height ${HIGHLIGHT_MS}ms ease-out, opacity ${HIGHLIGHT_MS}ms ease-out;
+}
 ${P} ${part("panel-item")} {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 6px 8px 8px;
-  transition: background-color 150ms ease-out;
+  padding: 6px 6px 6px 8px;
 }
-${P} ${part("panel-item")} + ${part("panel-item")} { border-top: 0.5px solid ${rg.borderSubtle}; }
-${P} ${part("panel-item")}:hover,
-${P} ${part("panel-item")}:focus-within { background: ${rg.surfaceHover}; }
 ${P} ${part("panel-index")} {
   flex: none;
   min-width: 12px;
   color: ${rg.textMuted};
-  line-height: 18px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1459,9 +1486,8 @@ ${P} ${part("panel-summary")} {
   align-items: stretch;
   gap: 2px;
   text-align: left;
-  cursor: text;
+  cursor: pointer;
 }
-${P} ${part("panel-summary")}[hidden] { display: none; }
 ${P} ${part("panel-summary")}::after {
   content: "";
   position: absolute;
@@ -1478,7 +1504,6 @@ ${P} ${part("panel-summary-text")} {
   overflow: hidden;
   color: ${rg.text85};
   font-weight: 400;
-  line-height: 18px;
   overflow-wrap: anywhere;
 }
 ${P} ${part("panel-summary-text")}[data-kind="text"] { color: ${rg.textMuted}; }
@@ -1503,19 +1528,20 @@ ${P} ${part("panel-meta")} {
 ${P} ${part("panel-preview")} {
   flex: 1;
   min-width: 0;
-  min-height: 18px;
+  min-height: 16px;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: ${rg.text};
-  font: 400 13px/18px ${rg.font};
+  font: 400 13px/16px ${rg.font};
   resize: none;
   outline: none;
   overflow: hidden;
   overflow-wrap: anywhere;
 }
+${P}[data-editing] ${part("panel-item")}:not([data-editing]) { display: none; }
 ${P} ${part("delete-item")} {
   position: relative;
   z-index: 1;
@@ -1525,7 +1551,6 @@ ${P} ${part("delete-item")} {
   justify-content: center;
   width: 16px;
   height: 16px;
-  margin-top: 1px;
   border-radius: 4px;
   color: ${rg.textMuted};
   opacity: 0;
@@ -1632,6 +1657,22 @@ var createCrossIcon = () => {
   svg.append(path);
   return svg;
 };
+var createChevronLeftIcon = () => {
+  const svg = document.createElementNS(SVG_NS4, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS4, "path");
+  path.setAttribute("d", "M15 18l-6-6 6-6");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+};
 var createDeckPanel = () => {
   ensurePanelStyles();
   const panel = createPart("div", "panel");
@@ -1664,7 +1705,7 @@ var stopHostHandlers = (element) => {
   element.addEventListener("mousedown", (event) => event.stopPropagation());
   element.addEventListener("pointerdown", (event) => event.stopPropagation());
 };
-var createItemRow = (item, handlers) => {
+var createItemRow = (item, handlers, editHandlers) => {
   let content = item.content;
   let field = null;
   const row = createPart("article", "panel-item");
@@ -1688,12 +1729,15 @@ var createItemRow = (item, handlers) => {
     handlers.onRemoveItem(item.id);
   });
   const collapse = () => {
-    if (!field) return;
-    const next = field.value;
-    field.remove();
+    const editor = field;
+    if (!editor) return;
     field = null;
+    const next = editor.value;
+    editor.remove();
     summaryButton.hidden = false;
     summaryButton.setAttribute("aria-expanded", "false");
+    row.removeAttribute("data-editing");
+    editHandlers.onEditEnd(row);
     if (!next.trim()) {
       handlers.onRemoveItem(item.id);
       return;
@@ -1701,6 +1745,11 @@ var createItemRow = (item, handlers) => {
     content = next.trim();
     renderSummary(summaryText, meta, content);
     handlers.onUpdateItem(item.id, next);
+  };
+  const close = () => {
+    const editor = field;
+    collapse();
+    if (editor && row.isConnected) summaryButton.focus({ preventScroll: true });
   };
   const expand = () => {
     if (field) return;
@@ -1720,13 +1769,13 @@ var createItemRow = (item, handlers) => {
       event.stopPropagation();
       if (event.key === "Escape") {
         event.preventDefault();
-        const editor = field;
-        collapse();
-        if (editor) summaryButton.focus();
+        close();
       }
     });
     summaryButton.hidden = true;
     summaryButton.setAttribute("aria-expanded", "true");
+    row.setAttribute("data-editing", "");
+    editHandlers.onEditStart(row);
     summaryButton.after(field);
     autosize(field);
     field.focus({ preventScroll: true });
@@ -1750,8 +1799,57 @@ var createItemRow = (item, handlers) => {
       indexLabel.textContent = String(index + 1);
     },
     setContent,
-    field: () => field
+    field: () => field,
+    close
   };
+};
+var createHoverHighlight = (list) => {
+  const highlight = createPart("div", "panel-highlight");
+  highlight.setAttribute("aria-hidden", "true");
+  let target = null;
+  const place = (row) => {
+    highlight.style.top = `${row.offsetTop}px`;
+    highlight.style.height = `${row.offsetHeight}px`;
+  };
+  const show = (row) => {
+    if (row.hasAttribute("data-editing")) {
+      hide();
+      return;
+    }
+    const wasHidden = target === null;
+    target = row;
+    if (wasHidden) {
+      highlight.style.transitionProperty = "opacity";
+      place(row);
+      void highlight.offsetHeight;
+      highlight.style.transitionProperty = "";
+    } else {
+      place(row);
+    }
+    highlight.style.opacity = "1";
+  };
+  const hide = () => {
+    target = null;
+    highlight.style.opacity = "0";
+  };
+  const refresh = () => {
+    if (target?.isConnected) place(target);
+    else if (target) hide();
+  };
+  const rowFrom = (node) => node instanceof Element ? node.closest(part("panel-item")) : null;
+  list.addEventListener("pointerover", (event) => {
+    const row = rowFrom(event.target);
+    if (row && row !== target) show(row);
+  });
+  list.addEventListener("pointerleave", hide);
+  list.addEventListener("focusin", (event) => {
+    const row = rowFrom(event.target);
+    if (row) show(row);
+  });
+  list.addEventListener("focusout", (event) => {
+    if (!rowFrom(event.relatedTarget)) hide();
+  });
+  return { element: highlight, hide, refresh };
 };
 var createDeckPanelView = () => {
   const panel = createDeckPanel();
@@ -1763,8 +1861,19 @@ var createDeckPanelView = () => {
   title.append(titleLabel, countLabel);
   const clearButton = createButton("clear-all", "Clear all deck items");
   clearButton.textContent = "Clear";
-  header.append(title, clearButton);
+  const backButton = createButton("panel-back", "Back to all items");
+  backButton.title = "Back to all items (Esc)";
+  const backLabel = document.createElement("span");
+  backLabel.textContent = "All items";
+  backButton.append(createChevronLeftIcon(), backLabel);
+  backButton.hidden = true;
+  const positionLabel = createPart("span", "panel-position");
+  positionLabel.hidden = true;
+  header.append(backButton, title, positionLabel, clearButton);
   const list = createPart("div", "panel-list");
+  const highlight = createHoverHighlight(list);
+  const rows = createPart("div", "panel-rows");
+  list.append(highlight.element, rows);
   const footer = createPart("div", "panel-footer");
   const modeButton = createButton("panel-mode-toggle", "Turn batch mode off");
   const modeLabel = document.createElement("span");
@@ -1777,6 +1886,39 @@ var createDeckPanelView = () => {
   footer.append(modeButton, copyButton);
   panel.append(header, list, footer);
   let footerHandlers = null;
+  const rowsById = /* @__PURE__ */ new Map();
+  let editingRow = null;
+  const renderHeader = () => {
+    const isEditing = editingRow !== null;
+    backButton.hidden = !isEditing;
+    title.hidden = isEditing;
+    clearButton.hidden = isEditing;
+    positionLabel.hidden = !isEditing;
+    if (isEditing) {
+      const index = Array.prototype.indexOf.call(rows.children, editingRow);
+      positionLabel.textContent = `${index + 1} of ${rows.children.length}`;
+    }
+  };
+  const editHandlers = {
+    onEditStart: (row) => {
+      editingRow = row;
+      panel.setAttribute("data-editing", "");
+      highlight.hide();
+      renderHeader();
+    },
+    onEditEnd: (row) => {
+      if (editingRow !== row) return;
+      editingRow = null;
+      panel.removeAttribute("data-editing");
+      renderHeader();
+    }
+  };
+  backButton.addEventListener("mousedown", (event) => event.preventDefault());
+  backButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const id = editingRow?.getAttribute(ITEM_ID_ATTR);
+    if (id) rowsById.get(id)?.close();
+  });
   modeButton.addEventListener("click", (event) => {
     event.stopPropagation();
     footerHandlers?.onToggleMode();
@@ -1789,18 +1931,21 @@ var createDeckPanelView = () => {
     event.stopPropagation();
     footerHandlers?.onCopyAll();
   });
-  const rowsById = /* @__PURE__ */ new Map();
   const setBatchActive = (active) => {
     modeButton.title = active ? "Batch mode on: grabs queue in the deck" : "Batch mode off: grabs copy to the clipboard only";
     modeButton.setAttribute("aria-label", active ? "Turn batch mode off" : "Turn batch mode on");
     modeButton.setAttribute("aria-pressed", String(active));
   };
   setBatchActive(true);
-  const hasFocusedField = () => list.contains(document.activeElement) && document.activeElement instanceof HTMLTextAreaElement && document.activeElement.matches(`textarea${part("panel-preview")}`);
+  const hasFocusedField = () => rows.contains(document.activeElement) && document.activeElement instanceof HTMLTextAreaElement && document.activeElement.matches(`textarea${part("panel-preview")}`);
   const sync = (items2, handlers) => {
     if (items2.length === 0) {
-      list.replaceChildren();
+      rows.replaceChildren();
       rowsById.clear();
+      editingRow = null;
+      panel.removeAttribute("data-editing");
+      renderHeader();
+      highlight.hide();
       return;
     }
     footerHandlers = handlers;
@@ -1820,7 +1965,7 @@ var createDeckPanelView = () => {
     for (const [index, item] of items2.entries()) {
       let entry = rowsById.get(item.id);
       if (!entry) {
-        entry = createItemRow(item, handlers);
+        entry = createItemRow(item, handlers, editHandlers);
         rowsById.set(item.id, entry);
       } else {
         entry.setContent(item.content);
@@ -1829,11 +1974,13 @@ var createDeckPanelView = () => {
       orderedRows.push(entry.row);
     }
     for (const [index, row] of orderedRows.entries()) {
-      if (list.children[index] !== row) list.insertBefore(row, list.children[index] ?? null);
+      if (rows.children[index] !== row) rows.insertBefore(row, rows.children[index] ?? null);
     }
-    while (list.children.length > orderedRows.length) {
-      list.lastElementChild?.remove();
+    while (rows.children.length > orderedRows.length) {
+      rows.lastElementChild?.remove();
     }
+    renderHeader();
+    highlight.refresh();
     panel.style.display = "flex";
   };
   return { panel, hasFocusedField, setBatchActive, sync };
@@ -1884,6 +2031,9 @@ var getToolbarActionAnchor = (button) => {
   if (!button) return null;
   return button.parentElement ?? button;
 };
+var dismissReactGrabPanels = () => {
+  window.dispatchEvent(new MouseEvent("mousedown"));
+};
 var createDeckUi = (onCopyAll) => {
   let count = 0;
   let batchMode = false;
@@ -1926,10 +2076,12 @@ var createDeckUi = (onCopyAll) => {
       const panelWidth2 = panel.offsetWidth || 420;
       const left2 = edge === "left" ? toolbarBounds.right + gap : toolbarBounds.left - gap - panelWidth2;
       panel.style.left = `${Math.max(12, Math.min(left2, window.innerWidth - panelWidth2 - 12))}px`;
-      panel.style.top = `${Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12))}px`;
+      const top = Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12));
+      panel.style.top = `${top}px`;
       panel.style.right = "auto";
       panel.style.bottom = "auto";
       panel.style.maxHeight = `${Math.min(360, window.innerHeight - 24)}px`;
+      panel.style.transformOrigin = `${edge === "left" ? "0" : "100%"} ${rect.top + rect.height / 2 - top}px`;
       return;
     }
     const spaceAbove = rect.top - gap;
@@ -1946,21 +2098,36 @@ var createDeckUi = (onCopyAll) => {
     left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
     panel.style.left = `${left}px`;
     panel.style.right = "auto";
+    panel.style.transformOrigin = `${rect.left + rect.width / 2 - left}px ${openUp ? "100%" : "0"}`;
     panel.style.maxHeight = openUp ? `${Math.max(160, Math.min(360, spaceAbove - 8))}px` : `${Math.max(160, Math.min(360, window.innerHeight - rect.bottom - gap - 12))}px`;
   };
+  let unmountTimer;
   const syncPanelMount = () => {
     if (panelOpen && count > 0) {
-      if (!panel.isConnected) document.body.append(panel);
+      window.clearTimeout(unmountTimer);
+      unmountTimer = void 0;
+      const isMounting = !panel.isConnected;
+      if (isMounting) {
+        panel.removeAttribute("data-state");
+        document.body.append(panel);
+      }
       panel.style.display = "flex";
       positionPanel();
       panelToggle.setAttribute("aria-expanded", "true");
+      if (isMounting) void panel.offsetHeight;
+      panel.setAttribute("data-state", "open");
       return;
     }
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
-    panel.style.display = "none";
     panelToggle.setAttribute("aria-expanded", "false");
-    if (panel.isConnected) panel.remove();
+    if (!panel.isConnected || unmountTimer !== void 0) return;
+    panel.removeAttribute("data-state");
+    unmountTimer = window.setTimeout(() => {
+      unmountTimer = void 0;
+      panel.style.display = "none";
+      panel.remove();
+    }, PANEL_EXIT_MS);
   };
   const affordanceLabel = () => {
     if (status === "flash") return "Deck copied to clipboard";
@@ -2096,6 +2263,7 @@ var createDeckUi = (onCopyAll) => {
   panelToggle.addEventListener("click", () => {
     if (count === 0) return;
     panelOpen = !panelOpen;
+    if (panelOpen) dismissReactGrabPanels();
     render();
   });
   const onViewportChange = () => {
@@ -2159,6 +2327,7 @@ var createDeckUi = (onCopyAll) => {
       window.removeEventListener("scroll", onViewportChange, true);
       window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
       if (flashTimer !== void 0) window.clearTimeout(flashTimer);
+      window.clearTimeout(unmountTimer);
       endDragTracking();
       unsubscribeDeck();
       unsubscribeMode();

@@ -6,7 +6,7 @@ import {
   SUCCESS_FLASH_DURATION_MS,
 } from "./constants.js";
 import { createDeckAffordance } from "./deck-affordance.js";
-import { createDeckPanelView } from "./deck-panel.js";
+import { createDeckPanelView, PANEL_EXIT_MS } from "./deck-panel.js";
 import { iconDeckList } from "./deck-icons.js";
 import {
   applyIconColor,
@@ -43,6 +43,14 @@ const getToolbarActionAnchor = (button: Element | null | undefined): Element | n
 };
 
 type DeckAffordanceStatus = "idle" | "copying" | "flash";
+
+// React Grab closes its style panel and menus on a mousedown outside them, but
+// ignores presses inside its own toolbar, where the deck toggle sits. Dispatch
+// one on window so the deck replaces whatever React Grab had open. It does not
+// bubble, so only window listeners see it, not the page's document or elements.
+const dismissReactGrabPanels = (): void => {
+  window.dispatchEvent(new MouseEvent("mousedown"));
+};
 
 export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
   let count = 0;
@@ -93,10 +101,12 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       const panelWidth = panel.offsetWidth || 420;
       const left = edge === "left" ? toolbarBounds.right + gap : toolbarBounds.left - gap - panelWidth;
       panel.style.left = `${Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12))}px`;
-      panel.style.top = `${Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12))}px`;
+      const top = Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12));
+      panel.style.top = `${top}px`;
       panel.style.right = "auto";
       panel.style.bottom = "auto";
       panel.style.maxHeight = `${Math.min(360, window.innerHeight - 24)}px`;
+      panel.style.transformOrigin = `${edge === "left" ? "0" : "100%"} ${rect.top + rect.height / 2 - top}px`;
       return;
     }
     const spaceAbove = rect.top - gap;
@@ -115,26 +125,44 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
     panel.style.left = `${left}px`;
     panel.style.right = "auto";
+    panel.style.transformOrigin = `${rect.left + rect.width / 2 - left}px ${openUp ? "100%" : "0"}`;
     panel.style.maxHeight = openUp
       ? `${Math.max(160, Math.min(360, spaceAbove - 8))}px`
       : `${Math.max(160, Math.min(360, window.innerHeight - rect.bottom - gap - 12))}px`;
   };
 
+  let unmountTimer: number | undefined;
+
+  // Mount, then flip data-state on the next frame so the open transition runs
+  // from the scaled-down state; on close, wait out the exit before unmounting.
   const syncPanelMount = (): void => {
     if (panelOpen && count > 0) {
-      if (!panel.isConnected) document.body.append(panel);
+      window.clearTimeout(unmountTimer);
+      unmountTimer = undefined;
+      const isMounting = !panel.isConnected;
+      if (isMounting) {
+        panel.removeAttribute("data-state");
+        document.body.append(panel);
+      }
       panel.style.display = "flex";
       positionPanel();
       panelToggle.setAttribute("aria-expanded", "true");
+      if (isMounting) void panel.offsetHeight;
+      panel.setAttribute("data-state", "open");
       return;
     }
     // Blur first so an open edit is saved: removal alone does not reliably
     // fire blur on the textarea.
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
-    panel.style.display = "none";
     panelToggle.setAttribute("aria-expanded", "false");
-    if (panel.isConnected) panel.remove();
+    if (!panel.isConnected || unmountTimer !== undefined) return;
+    panel.removeAttribute("data-state");
+    unmountTimer = window.setTimeout(() => {
+      unmountTimer = undefined;
+      panel.style.display = "none";
+      panel.remove();
+    }, PANEL_EXIT_MS);
   };
 
   const affordanceLabel = (): string => {
@@ -301,6 +329,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
   panelToggle.addEventListener("click", () => {
     if (count === 0) return;
     panelOpen = !panelOpen;
+    if (panelOpen) dismissReactGrabPanels();
     render();
   });
 
@@ -382,6 +411,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       window.removeEventListener("scroll", onViewportChange, true);
       window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
       if (flashTimer !== undefined) window.clearTimeout(flashTimer);
+      window.clearTimeout(unmountTimer);
       endDragTracking();
       unsubscribeDeck();
       unsubscribeMode();
