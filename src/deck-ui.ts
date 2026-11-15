@@ -3,6 +3,7 @@ import {
   DECK_COPIED_FLASH_DURATION_MS,
   DECK_MAX_ITEMS,
   DECK_UI_ATTRIBUTE,
+  SUCCESS_FLASH_DURATION_MS,
 } from "./constants.js";
 import { createDeckAffordance } from "./deck-affordance.js";
 import { createDeckPanelView } from "./deck-panel.js";
@@ -22,6 +23,7 @@ import {
   updateDeckItem,
   type DeckItem,
 } from "./deck-store.js";
+import { createHintPill } from "./utils/create-hint-pill.js";
 import { syncToolbarSegment } from "./utils/sync-toolbar-segment.js";
 import { getToolbarEdge } from "./utils/get-toolbar-edge.js";
 
@@ -126,6 +128,10 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
       panelToggle.setAttribute("aria-expanded", "true");
       return;
     }
+    // Blur first so an open edit is saved: removal alone does not reliably
+    // fire blur on the textarea.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
     panel.style.display = "none";
     panelToggle.setAttribute("aria-expanded", "false");
     if (panel.isConnected) panel.remove();
@@ -163,10 +169,38 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     panelToggle.setAttribute("aria-label", panelOpen ? "Close deck panel" : "Review deck items");
   };
 
+  const showCopiedPill = (copiedCount: number): void => {
+    const pill = createHintPill();
+    pill.showCopied(`Copied ${copiedCount} ${copiedCount === 1 ? "item" : "items"}`);
+    // The toolbar segment re-lays out once the panel toggle hides; anchor
+    // after that settles.
+    requestAnimationFrame(() => pill.reposition(deckButton.getBoundingClientRect()));
+    window.setTimeout(() => pill.destroy(), SUCCESS_FLASH_DURATION_MS);
+  };
+
+  // One path for the toolbar badge and the panel button, so both close the
+  // panel, flash the check and show the same Copied label.
+  const copyAll = (): void => {
+    if (status !== "idle" || count === 0) return;
+    const copiedCount = count;
+    panelOpen = false;
+    setStatus("copying");
+    void onCopyAll()
+      .then((didCopy) => {
+        if (!didCopy) return;
+        showCopiedPill(copiedCount);
+        if (getDeckItems().length === 0) setStatus("flash");
+      })
+      .catch(() => {
+        // Clipboard failure or subscriber throw — unlock the affordance.
+      })
+      .finally(() => {
+        if (status === "copying") setStatus("idle");
+      });
+  };
+
   const panelHandlers = {
-    onCopyAll: () => {
-      void onCopyAll();
-    },
+    onCopyAll: copyAll,
     onClearAll: () => {
       clearDeck();
     },
@@ -257,18 +291,7 @@ export const createDeckUi = (onCopyAll: () => Promise<boolean>): DeckUi => {
     if (wasDrag || status !== "idle") return;
 
     if (count > 0) {
-      panelOpen = false;
-      setStatus("copying");
-      void onCopyAll()
-        .then((didCopy) => {
-          if (didCopy && getDeckItems().length === 0) setStatus("flash");
-        })
-        .catch(() => {
-          // Clipboard failure or subscriber throw — unlock the affordance.
-        })
-        .finally(() => {
-          if (status === "copying") setStatus("idle");
-        });
+      copyAll();
       return;
     }
 

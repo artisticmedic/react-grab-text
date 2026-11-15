@@ -1,71 +1,307 @@
 import { DECK_UI_ATTRIBUTE, REACT_GRAB_IGNORE_ATTRIBUTE, REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE } from "./constants.js";
 import { type DeckItem } from "./deck-store.js";
+import { DECK_ITEM_KIND_LABEL, summarizeDeckItem } from "./deck-summary.js";
+import { adoptReactGrabTheme, rg } from "./utils/react-grab-theme.js";
+
+const ITEM_ID_ATTR = "data-deck-item-id";
+const STYLE_ELEMENT_ID = "react-grab-deck-panel-styles";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const part = (name: string): string => `[${DECK_UI_ATTRIBUTE}="${name}"]`;
+const P = part("panel");
+
+// Hover, focus and press states need real selectors, so the panel is styled
+// from one sheet. The panel lives in the host page's light DOM, so the first
+// rule rolls host element rules (a global `button { padding }`) back to the
+// browser defaults. SVG is skipped because `all` would also revert its
+// presentation attributes.
+const PANEL_CSS = `
+${P} *:not(svg, svg *) { all: revert; }
+${P} {
+  position: fixed;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: min(360px, calc(100vw - 24px));
+  max-width: min(400px, calc(100vw - 24px));
+  max-height: min(400px, 52vh);
+  overflow: hidden;
+  border-radius: 14px;
+  corner-shape: superellipse(1.25);
+  background: ${rg.panelBg};
+  color: ${rg.text};
+  box-shadow: ${rg.shadow};
+  font: 500 13px/16px ${rg.font};
+  letter-spacing: normal;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  z-index: 2147483645;
+  animation: react-grab-deck-panel-in 180ms ${rg.easeDrawer};
+}
+@keyframes react-grab-deck-panel-in {
+  from { opacity: 0; transform: scale(0.98); }
+}
+${P} *, ${P} *::before, ${P} *::after { box-sizing: border-box; }
+${P} button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+${P} button:focus-visible {
+  outline: 1px solid ${rg.borderButton};
+  outline-offset: 1px;
+}
+
+${P} ${part("panel-header")} {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 4px 4px 8px;
+}
+${P} ${part("panel-title")} { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+${P} ${part("panel-count")} { color: ${rg.textMuted}; font-variant-numeric: tabular-nums; }
+${P} ${part("clear-all")} {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: ${rg.textMuted};
+  transition: color 150ms ease-out, background-color 150ms ease-out;
+}
+${P} ${part("clear-all")}:hover { color: ${rg.text}; background: ${rg.surfaceHover}; }
+
+${P} ${part("panel-list")} {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 0.5px solid ${rg.borderSubtle};
+  scrollbar-width: thin;
+  scrollbar-color: ${rg.borderButton} transparent;
+}
+${P} ${part("panel-item")} {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 6px 8px 8px;
+  transition: background-color 150ms ease-out;
+}
+${P} ${part("panel-item")} + ${part("panel-item")} { border-top: 0.5px solid ${rg.borderSubtle}; }
+${P} ${part("panel-item")}:hover,
+${P} ${part("panel-item")}:focus-within { background: ${rg.surfaceHover}; }
+${P} ${part("panel-index")} {
+  flex: none;
+  min-width: 12px;
+  color: ${rg.textMuted};
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+${P} ${part("panel-summary")} {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: left;
+  cursor: text;
+}
+${P} ${part("panel-summary")}[hidden] { display: none; }
+${P} ${part("panel-summary")}::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+${P} ${part("panel-summary")}:focus-visible { outline: none; }
+${P} ${part("panel-item")}:has(${part("panel-summary")}:focus-visible) {
+  box-shadow: inset 0 0 0 1px ${rg.borderButton};
+}
+${P} ${part("panel-summary-text")} {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: ${rg.text85};
+  font-weight: 400;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+${P} ${part("panel-summary-text")}[data-kind="text"] { color: ${rg.textMuted}; }
+${P} ${part("panel-summary-text")} del {
+  color: ${rg.textMuted};
+  text-decoration: line-through;
+  text-decoration-color: ${rg.textMuted};
+}
+${P} ${part("panel-summary-text")} ins {
+  color: ${rg.text};
+  font-weight: 500;
+  text-decoration: none;
+}
+${P} ${part("panel-meta")} {
+  overflow: hidden;
+  color: ${rg.textMuted};
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+${P} ${part("panel-preview")} {
+  flex: 1;
+  min-width: 0;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: ${rg.text};
+  font: 400 13px/18px ${rg.font};
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+${P} ${part("delete-item")} {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 4px;
+  color: ${rg.textMuted};
+  opacity: 0;
+  transition: opacity 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
+}
+${P} ${part("panel-item")}:hover ${part("delete-item")},
+${P} ${part("panel-item")}:focus-within ${part("delete-item")} { opacity: 1; }
+${P} ${part("delete-item")}:hover { color: ${rg.text}; background: ${rg.surfaceActive}; }
+
+${P} ${part("panel-footer")} {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 6px 6px 8px;
+  border-top: 0.5px solid ${rg.borderSubtle};
+}
+${P} ${part("panel-mode-toggle")} {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  color: ${rg.textMuted};
+  transition: color 150ms ease-out;
+}
+${P} ${part("panel-mode-toggle")}:hover,
+${P} ${part("panel-mode-toggle")}[aria-pressed="true"] { color: ${rg.text}; }
+${P} ${part("panel-switch")} {
+  position: relative;
+  width: 22px;
+  height: 12px;
+  border-radius: 9999px;
+  background: ${rg.surfaceActive};
+  transition: background-color 200ms ${rg.easeDrawer};
+}
+${P} ${part("panel-switch")}::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: ${rg.textMuted};
+  transition: transform 200ms ${rg.easeDrawer}, background-color 200ms ${rg.easeDrawer};
+}
+${P} [aria-pressed="true"] ${part("panel-switch")} { background: ${rg.text}; }
+${P} [aria-pressed="true"] ${part("panel-switch")}::after { transform: translateX(10px); background: ${rg.panelBg}; }
+${P} ${part("copy-all")} {
+  height: 28px;
+  padding: 0 12px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 9999px;
+  background: ${rg.submitBg};
+  color: ${rg.submitFg};
+  transition: transform 400ms ${rg.easeSpring};
+}
+${P} ${part("copy-all")}:active {
+  transform: scale(0.97);
+  transition: transform 60ms cubic-bezier(0, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ${P}, ${P} *, ${P} *::after { transition: none !important; animation: none !important; }
+}
+`;
+
+const ensurePanelStyles = (): void => {
+  if (document.getElementById(STYLE_ELEMENT_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ELEMENT_ID;
+  style.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
+  style.textContent = PANEL_CSS;
+  document.head.appendChild(style);
+};
 
 const markPanelControl = (element: HTMLElement): void => {
   element.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
   element.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
 };
 
-const t = {
-  bg: "var(--rg-panel-bg, #161616)",
-  text: "var(--rg-text-primary, #ffffff)",
-  textMuted: "var(--rg-text-secondary, #a7a7a7)",
-  border: "var(--rg-border-subtle, rgba(255, 255, 255, 0.1))",
-  borderFocus: "var(--rg-border-button, rgba(255, 255, 255, 0.2))",
-  submitBg: "var(--rg-submit-bg, #ffffff)",
-  submitFg: "var(--rg-submit-fg, #161616)",
-  shadow: "var(--rg-shadow, 0 2px 8px rgba(0, 0, 0, 0.08))",
-  mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-  sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-} as const;
+const createPart = <K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  name: string,
+): HTMLElementTagNameMap[K] => {
+  const element = document.createElement(tag);
+  element.setAttribute(DECK_UI_ATTRIBUTE, name);
+  return element;
+};
 
-const PANEL_RADIUS = "10px";
-const PANEL_PAD = "12px";
-const ITEM_GAP = "16px";
-const FIELD_LINE = "1.45";
-const ITEM_ID_ATTR = "data-deck-item-id";
+const createButton = (name: string, label: string): HTMLButtonElement => {
+  const button = createPart("button", name);
+  button.type = "button";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  markPanelControl(button);
+  return button;
+};
 
-const applyFocusVisibleRing = (element: HTMLElement): void => {
-  let suppressRing = false;
-  element.addEventListener("mousedown", () => {
-    suppressRing = true;
-  });
-  element.addEventListener("focus", () => {
-    requestAnimationFrame(() => {
-      if (!suppressRing && element.matches(":focus-visible")) {
-        element.style.outline = `1px solid ${t.borderFocus}`;
-        element.style.outlineOffset = "2px";
-      }
-      suppressRing = false;
-    });
-  });
-  element.addEventListener("blur", () => {
-    element.style.outline = "none";
-    element.style.outlineOffset = "0";
-  });
+const createCrossIcon = (): SVGSVGElement => {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "10");
+  svg.setAttribute("height", "10");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", "M6 6l12 12M18 6L6 18");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2.5");
+  path.setAttribute("stroke-linecap", "round");
+  svg.append(path);
+  return svg;
 };
 
 export const createDeckPanel = (): HTMLDivElement => {
-  const panel = document.createElement("div");
-  panel.setAttribute(DECK_UI_ATTRIBUTE, "panel");
+  ensurePanelStyles();
+  const panel = createPart("div", "panel");
   markPanelControl(panel);
-  Object.assign(panel.style, {
-    display: "none",
-    position: "fixed",
-    flexDirection: "column",
-    minWidth: "min(360px, calc(100vw - 24px))",
-    maxWidth: "min(400px, calc(100vw - 24px))",
-    maxHeight: "min(400px, 52vh)",
-    overflow: "hidden",
-    borderRadius: PANEL_RADIUS,
-    background: t.bg,
-    color: t.text,
-    border: `1px solid ${t.border}`,
-    boxShadow: t.shadow,
-    font: `12px/${FIELD_LINE} ${t.sans}`,
-    WebkitFontSmoothing: "antialiased",
-    zIndex: "2147483645",
-  });
+  panel.style.display = "none";
   return panel;
 };
 
@@ -77,137 +313,143 @@ type PanelHandlers = {
   onToggleMode: () => void;
 };
 
-const createItemField = (
-  itemId: string,
-  content: string,
-  handlers: PanelHandlers,
-): HTMLTextAreaElement => {
-  const field = document.createElement("textarea");
-  field.value = content;
-  field.rows = 3;
-  field.setAttribute(ITEM_ID_ATTR, itemId);
-  markPanelControl(field);
-  Object.assign(field.style, {
-    flex: "1",
-    minWidth: "0",
-    boxSizing: "border-box",
-    margin: "0",
-    padding: "0",
-    border: "none",
-    borderRadius: "0",
-    background: "transparent",
-    color: t.text,
-    fontFamily: t.mono,
-    fontSize: "11px",
-    lineHeight: FIELD_LINE,
-    resize: "vertical",
-    minHeight: "48px",
-    outline: "none",
-  });
-
-  applyFocusVisibleRing(field);
-
-  field.addEventListener("blur", () => {
-    const next = field.value;
-    if (!next.trim()) {
-      handlers.onRemoveItem(itemId);
-      return;
-    }
-    handlers.onUpdateItem(itemId, next);
-  });
-  field.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      event.preventDefault();
-      field.blur();
-    }
-  });
-  field.addEventListener("mousedown", (event) => event.stopPropagation());
-  field.addEventListener("pointerdown", (event) => event.stopPropagation());
-
-  return field;
+const autosize = (field: HTMLTextAreaElement): void => {
+  field.style.height = "auto";
+  field.style.height = `${field.scrollHeight}px`;
 };
 
-const createIconButton = (
-  label: string,
-  uiPart: string,
-  text: string,
-  extra?: Record<string, string>,
-): HTMLButtonElement => {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.setAttribute(DECK_UI_ATTRIBUTE, uiPart);
-  button.textContent = text;
-  button.title = label;
-  button.setAttribute("aria-label", label);
-  markPanelControl(button);
-  Object.assign(button.style, {
-    position: "relative",
-    flex: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: "24px",
-    minHeight: "24px",
-    padding: "0",
-    border: "none",
-    borderRadius: "4px",
-    background: "transparent",
-    color: t.textMuted,
-    font: "inherit",
-    lineHeight: "1",
-    cursor: "pointer",
-    ...extra,
-  });
-  button.addEventListener("mouseenter", () => {
-    button.style.color = t.text;
-  });
-  button.addEventListener("mouseleave", () => {
-    button.style.color = t.textMuted;
-  });
-  applyFocusVisibleRing(button);
-  return button;
+const renderSummary = (target: HTMLElement, meta: HTMLElement, content: string): void => {
+  const summary = summarizeDeckItem(content);
+  target.setAttribute("data-kind", summary.kind);
+  target.replaceChildren(
+    ...summary.parts.map((piece) => {
+      if (piece.kind === "same") return document.createTextNode(piece.text);
+      const mark = document.createElement(piece.kind === "removed" ? "del" : "ins");
+      mark.textContent = piece.text;
+      return mark;
+    }),
+  );
+  meta.textContent = [
+    DECK_ITEM_KIND_LABEL[summary.kind],
+    summary.element ? `<${summary.element}>` : null,
+    summary.component,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 };
 
-const createItemRow = (index: number, item: DeckItem, handlers: PanelHandlers): HTMLElement => {
-  const row = document.createElement("article");
-  row.setAttribute(DECK_UI_ATTRIBUTE, "panel-item");
+const stopHostHandlers = (element: HTMLElement): void => {
+  element.addEventListener("mousedown", (event) => event.stopPropagation());
+  element.addEventListener("pointerdown", (event) => event.stopPropagation());
+};
+
+interface ItemRow {
+  row: HTMLElement;
+  setIndex: (index: number) => void;
+  setContent: (content: string) => void;
+  field: () => HTMLTextAreaElement | null;
+}
+
+// Rows show a two-line summary so the list is the only thing that scrolls.
+// Clicking a row swaps in an editor for the raw payload, sized to its content.
+const createItemRow = (item: DeckItem, handlers: PanelHandlers): ItemRow => {
+  let content = item.content;
+  let field: HTMLTextAreaElement | null = null;
+
+  const row = createPart("article", "panel-item");
   row.setAttribute(ITEM_ID_ATTR, item.id);
-  Object.assign(row.style, {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px",
-  });
 
-  const indexLabel = document.createElement("span");
+  const indexLabel = createPart("span", "panel-index");
   indexLabel.setAttribute("data-deck-item-index", "true");
-  indexLabel.textContent = String(index + 1);
-  Object.assign(indexLabel.style, {
-    flex: "none",
-    width: "14px",
-    paddingTop: "1px",
-    color: t.textMuted,
-    fontSize: "11px",
-    fontWeight: "600",
-    fontVariantNumeric: "tabular-nums",
-    textAlign: "right",
-  });
 
-  const field = createItemField(item.id, item.content, handlers);
-  field.setAttribute(DECK_UI_ATTRIBUTE, "panel-preview");
+  const summaryButton = createPart("button", "panel-summary");
+  summaryButton.type = "button";
+  summaryButton.title = "Edit this item";
+  summaryButton.setAttribute("aria-expanded", "false");
+  markPanelControl(summaryButton);
+  stopHostHandlers(summaryButton);
+  const summaryText = createPart("span", "panel-summary-text");
+  const meta = createPart("span", "panel-meta");
+  summaryButton.append(summaryText, meta);
 
-  const deleteButton = createIconButton("Remove from deck", "delete-item", "×", {
-    fontSize: "16px",
-    marginTop: "-1px",
-  });
+  const deleteButton = createButton("delete-item", "Remove from deck");
+  deleteButton.append(createCrossIcon());
   deleteButton.setAttribute(ITEM_ID_ATTR, item.id);
   deleteButton.addEventListener("click", (event) => {
     event.stopPropagation();
     handlers.onRemoveItem(item.id);
   });
 
-  row.append(indexLabel, field, deleteButton);
-  return row;
+  const collapse = (): void => {
+    if (!field) return;
+    const next = field.value;
+    field.remove();
+    field = null;
+    summaryButton.hidden = false;
+    summaryButton.setAttribute("aria-expanded", "false");
+    if (!next.trim()) {
+      handlers.onRemoveItem(item.id);
+      return;
+    }
+    content = next.trim();
+    renderSummary(summaryText, meta, content);
+    handlers.onUpdateItem(item.id, next);
+  };
+
+  const expand = (): void => {
+    if (field) return;
+    field = createPart("textarea", "panel-preview");
+    field.value = content;
+    field.rows = 1;
+    field.spellcheck = false;
+    field.setAttribute(ITEM_ID_ATTR, item.id);
+    field.setAttribute("aria-label", "Deck item");
+    markPanelControl(field);
+    stopHostHandlers(field);
+    field.addEventListener("input", () => {
+      if (field) autosize(field);
+    });
+    field.addEventListener("blur", collapse);
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        const editor = field;
+        collapse();
+        if (editor) summaryButton.focus();
+      }
+    });
+    summaryButton.hidden = true;
+    summaryButton.setAttribute("aria-expanded", "true");
+    summaryButton.after(field);
+    autosize(field);
+    field.focus({ preventScroll: true });
+    field.setSelectionRange(0, 0);
+    row.scrollIntoView({ block: "nearest" });
+  };
+
+  summaryButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    expand();
+  });
+
+  row.append(indexLabel, summaryButton, deleteButton);
+
+  const setContent = (next: string): void => {
+    if (field || next === content) return;
+    content = next;
+    renderSummary(summaryText, meta, content);
+  };
+  renderSummary(summaryText, meta, content);
+
+  return {
+    row,
+    setIndex: (index) => {
+      indexLabel.textContent = String(index + 1);
+    },
+    setContent,
+    field: () => field,
+  };
 };
 
 export interface DeckPanelView {
@@ -219,75 +461,35 @@ export interface DeckPanelView {
 
 export const createDeckPanelView = (): DeckPanelView => {
   const panel = createDeckPanel();
-  const scroll = document.createElement("div");
-  Object.assign(scroll.style, {
-    flex: "1",
-    minHeight: "0",
-    overflowY: "auto",
-    padding: PANEL_PAD,
-    display: "flex",
-    flexDirection: "column",
-    gap: ITEM_GAP,
-  });
 
-  const footer = document.createElement("footer");
-  Object.assign(footer.style, {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "12px",
-    padding: `0 ${PANEL_PAD} ${PANEL_PAD}`,
-    flexShrink: "0",
-  });
+  const header = createPart("div", "panel-header");
+  const title = createPart("div", "panel-title");
+  const titleLabel = document.createElement("span");
+  titleLabel.textContent = "Deck";
+  const countLabel = createPart("span", "panel-count");
+  title.append(titleLabel, countLabel);
+  const clearButton = createButton("clear-all", "Clear all deck items");
+  clearButton.textContent = "Clear";
+  header.append(title, clearButton);
 
-  const meta = document.createElement("div");
-  Object.assign(meta.style, {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    minWidth: "0",
-    color: t.textMuted,
-    fontSize: "11px",
-  });
+  const list = createPart("div", "panel-list");
 
-  const countLabel = document.createElement("span");
-  const separator = document.createElement("span");
-  separator.textContent = "·";
-  separator.setAttribute("aria-hidden", "true");
-
+  const footer = createPart("div", "panel-footer");
   // The toolbar affordance turns into copy-all as soon as an item is queued, so
   // it can no longer double as the mode toggle. The panel is reachable in exactly
   // that state, which makes the footer the one place batch mode stays switchable.
-  const modeButton = createIconButton("Turn batch mode off", "panel-mode-toggle", "Batch on", {
-    fontSize: "11px",
-    minWidth: "0",
-    minHeight: "24px",
-    padding: "4px 0",
-  });
+  const modeButton = createButton("panel-mode-toggle", "Turn batch mode off");
+  const modeLabel = document.createElement("span");
+  modeLabel.textContent = "Batch";
+  const modeSwitch = createPart("span", "panel-switch");
+  modeSwitch.setAttribute("aria-hidden", "true");
+  modeButton.append(modeLabel, modeSwitch);
 
-  const clearButton = createIconButton("Clear all deck items", "clear-all", "Clear", {
-    fontSize: "11px",
-    minWidth: "0",
-    minHeight: "24px",
-    padding: "4px 0",
-  });
+  const copyButton = createButton("copy-all", "Copy all deck items");
+  copyButton.textContent = "Copy all";
+  footer.append(modeButton, copyButton);
 
-  const copyButton = createIconButton("Copy all deck items", "copy-all", "Copy all", {
-    flex: "none",
-    padding: "6px 10px",
-    borderRadius: "6px",
-    background: t.submitBg,
-    color: t.submitFg,
-    fontSize: "12px",
-    fontWeight: "600",
-    minWidth: "0",
-  });
-  copyButton.addEventListener("mouseenter", () => {
-    copyButton.style.color = t.submitFg;
-  });
-  copyButton.addEventListener("mouseleave", () => {
-    copyButton.style.color = t.submitFg;
-  });
+  panel.append(header, list, footer);
 
   let footerHandlers: PanelHandlers | null = null;
 
@@ -304,85 +506,62 @@ export const createDeckPanelView = (): DeckPanelView => {
     footerHandlers?.onCopyAll();
   });
 
-  const modeSeparator = separator.cloneNode(true) as HTMLSpanElement;
+  const rowsById = new Map<string, ItemRow>();
 
-  meta.append(countLabel, separator, modeButton, modeSeparator, clearButton);
-  footer.append(meta, copyButton);
-  panel.append(scroll, footer);
-
-  const getRowField = (row: Element): HTMLTextAreaElement | null =>
-    row.querySelector(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
-
-  // Colour carries the state, so the hover handlers createIconButton installed
-  // have to be overridden or they would repaint it back to idle on mouseleave.
-  let batchActive = true;
-  const paintMode = (): void => {
-    modeButton.style.color = batchActive ? t.text : t.textMuted;
-  };
   const setBatchActive = (active: boolean): void => {
-    batchActive = active;
-    modeButton.textContent = active ? "Batch on" : "Batch off";
-    modeButton.title = active ? "Turn batch mode off" : "Turn batch mode on";
-    modeButton.setAttribute("aria-label", modeButton.title);
+    modeButton.title = active
+      ? "Batch mode on: grabs queue in the deck"
+      : "Batch mode off: grabs copy to the clipboard only";
+    modeButton.setAttribute("aria-label", active ? "Turn batch mode off" : "Turn batch mode on");
     modeButton.setAttribute("aria-pressed", String(active));
-    paintMode();
   };
-  modeButton.addEventListener("mouseenter", () => {
-    modeButton.style.color = t.text;
-  });
-  modeButton.addEventListener("mouseleave", paintMode);
   setBatchActive(true);
 
   const hasFocusedField = (): boolean =>
-    scroll.contains(document.activeElement) &&
+    list.contains(document.activeElement) &&
     document.activeElement instanceof HTMLTextAreaElement &&
-    document.activeElement.matches(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
+    document.activeElement.matches(`textarea${part("panel-preview")}`);
 
   const sync = (items: readonly DeckItem[], handlers: PanelHandlers): void => {
     if (items.length === 0) {
-      scroll.replaceChildren();
+      list.replaceChildren();
+      rowsById.clear();
       return;
     }
 
     footerHandlers = handlers;
-    countLabel.textContent = `${items.length} ${items.length === 1 ? "item" : "items"}`;
+    adoptReactGrabTheme(panel);
+    const noun = items.length === 1 ? "item" : "items";
+    countLabel.textContent = `${items.length} ${noun}`;
+    copyButton.textContent = `Copy ${items.length} ${noun}`;
+    copyButton.setAttribute("aria-label", `Copy all ${items.length} deck ${noun}`);
+    copyButton.title = `Copy all ${items.length} deck ${noun}`;
 
     const nextIds = new Set(items.map((item) => item.id));
-    const existingRows = [...scroll.querySelectorAll<HTMLElement>(`article[${DECK_UI_ATTRIBUTE}="panel-item"]`)];
-    const rowsById = new Map(existingRows.map((row) => [row.getAttribute(ITEM_ID_ATTR), row] as const));
-
-    for (const row of existingRows) {
-      const id = row.getAttribute(ITEM_ID_ATTR);
-      if (!id || nextIds.has(id)) continue;
-      const field = getRowField(row);
-      if (field === document.activeElement) continue;
-      row.remove();
+    for (const [id, entry] of rowsById) {
+      if (nextIds.has(id) || entry.field() === document.activeElement) continue;
+      entry.row.remove();
       rowsById.delete(id);
     }
 
     const orderedRows: HTMLElement[] = [];
     for (const [index, item] of items.entries()) {
-      let row = rowsById.get(item.id);
-      if (!row) {
-        row = createItemRow(index, item, handlers);
-        rowsById.set(item.id, row);
+      let entry = rowsById.get(item.id);
+      if (!entry) {
+        entry = createItemRow(item, handlers);
+        rowsById.set(item.id, entry);
       } else {
-        const indexLabel = row.querySelector<HTMLElement>("[data-deck-item-index]");
-        if (indexLabel) indexLabel.textContent = String(index + 1);
-
-        const field = getRowField(row);
-        if (field && field !== document.activeElement && field.value !== item.content) {
-          field.value = item.content;
-        }
+        entry.setContent(item.content);
       }
-      orderedRows.push(row);
+      entry.setIndex(index);
+      orderedRows.push(entry.row);
     }
 
     for (const [index, row] of orderedRows.entries()) {
-      if (scroll.children[index] !== row) scroll.insertBefore(row, scroll.children[index] ?? null);
+      if (list.children[index] !== row) list.insertBefore(row, list.children[index] ?? null);
     }
-    while (scroll.children.length > orderedRows.length) {
-      scroll.lastElementChild?.remove();
+    while (list.children.length > orderedRows.length) {
+      list.lastElementChild?.remove();
     }
 
     panel.style.display = "flex";
