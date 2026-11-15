@@ -109,7 +109,8 @@ On 0.1.49, a persisted toolbar `defaultAction` isn't normalized. If `"text"` was
 ```
 npm install
 npm run build      # dist: ESM + CJS + IIFE global
-npm run demo       # vite playground
-npm test           # playwright e2e against npm's react-grab
-REACT_GRAB_BUILD=fork npm test   # ...against the fork build in vendor/
+npm run demo       # vite playground, on the fork build in vendor/
+npm test           # playwright e2e, on the fork build
+REACT_GRAB_BUILD=stock npm run demo   # ...on npm's react-grab instead
+REACT_GRAB_BUILD=stock npm test
 ```

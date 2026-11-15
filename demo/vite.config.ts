@@ -10,13 +10,13 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 // bundler does — plain <script src>. Both live outside the demo root (one in
 // node_modules, one in dist), so serve them raw and untransformed at stable
 // URLs rather than putting machine-specific /@fs/ paths in the HTML.
-// npm's react-grab by default, since that is what consumers install.
-// REACT_GRAB_BUILD=fork swaps in the committed fork build (vendor/README.md),
-// which CI also runs so the toolbar attachment holds on both palettes.
+// The committed fork build (vendor/README.md) by default, since that is the
+// toolbar the plugins are designed for. REACT_GRAB_BUILD=stock swaps in npm's
+// react-grab; CI runs both so the toolbar attachment holds on both palettes.
 const REACT_GRAB_IIFE =
-  process.env.REACT_GRAB_BUILD === "fork"
-    ? "vendor/react-grab.global.js"
-    : "node_modules/react-grab/dist/index.global.js";
+  process.env.REACT_GRAB_BUILD === "stock"
+    ? "node_modules/react-grab/dist/index.global.js"
+    : "vendor/react-grab.global.js";
 
 const IIFE_BUNDLES: Record<string, string> = {
   "/vendor/react-grab.iife.js": REACT_GRAB_IIFE,
