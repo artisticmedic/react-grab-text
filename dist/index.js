@@ -9,7 +9,6 @@ var UI_ATTRIBUTE = "data-react-grab-text-ui";
 var REACT_GRAB_IGNORE_ATTRIBUTE = "data-react-grab-ignore";
 var REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE = "data-react-grab-ignore-events";
 var REACT_GRAB_INPUT_ATTRIBUTE = "data-react-grab-input";
-var HINT_PILL_OFFSET_PX = 8;
 var HINT_PILL_VIEWPORT_MARGIN_PX = 8;
 var SUCCESS_FLASH_DURATION_MS = 1600;
 var OVERLAY_Z_INDEX = 2147483646;
@@ -255,8 +254,8 @@ var buildElementPreview = (element, textContent) => {
     attributeParts.push(`${attribute.name}="${escapeAttributeValue(value)}"`);
   }
   const attributes = attributeParts.length > 0 ? ` ${attributeParts.join(" ")}` : "";
-  const firstLine = textContent.trim().split("\n")[0] ?? "";
-  const textPreview = escapeText(truncate(firstLine, PREVIEW_MAX_TEXT_LENGTH));
+  const firstLine2 = textContent.trim().split("\n")[0] ?? "";
+  const textPreview = escapeText(truncate(firstLine2, PREVIEW_MAX_TEXT_LENGTH));
   return `<${tagName}${attributes}>${textPreview}</${tagName}>`;
 };
 
@@ -321,80 +320,198 @@ var copyTextToClipboard = async (text) => {
   return didCopy;
 };
 
+// src/utils/react-grab-theme.ts
+var REACT_GRAB_HOST_SELECTOR = "[data-react-grab]";
+var TOKEN_NAMES = [
+  "--rg-panel-bg",
+  "--rg-text-primary",
+  "--rg-text-primary-85",
+  "--rg-text-secondary",
+  "--rg-border-subtle",
+  "--rg-border-button",
+  "--rg-surface-hover",
+  "--rg-surface-active",
+  "--rg-submit-bg",
+  "--rg-submit-fg",
+  "--rg-shadow",
+  "--rg-error-text"
+];
+var rg = {
+  panelBg: "var(--rg-panel-bg, #161616)",
+  text: "var(--rg-text-primary, #ffffff)",
+  text85: "var(--rg-text-primary-85, #ffffffd9)",
+  textMuted: "var(--rg-text-secondary, #a7a7a7)",
+  borderSubtle: "var(--rg-border-subtle, #ffffff1a)",
+  borderButton: "var(--rg-border-button, #ffffff33)",
+  surfaceHover: "var(--rg-surface-hover, #ffffff1a)",
+  surfaceActive: "var(--rg-surface-active, #ffffff26)",
+  submitBg: "var(--rg-submit-bg, #ffffff)",
+  submitFg: "var(--rg-submit-fg, #161616)",
+  shadow: "var(--rg-shadow, 0 2px 8px #00000014)",
+  errorText: "var(--rg-error-text, #f87171)",
+  font: "Geist, ui-sans-serif, system-ui, sans-serif",
+  easeDrawer: "cubic-bezier(0.32, 0.72, 0, 1)",
+  easeSpring: "cubic-bezier(0.34, 1.56, 0.64, 1)"
+};
+var adoptReactGrabTheme = (element) => {
+  const host = document.querySelector(REACT_GRAB_HOST_SELECTOR);
+  if (!host) return;
+  const computed = getComputedStyle(host);
+  for (const name of TOKEN_NAMES) {
+    const value = computed.getPropertyValue(name).trim();
+    if (value) element.style.setProperty(name, value);
+  }
+};
+
 // src/utils/create-hint-pill.ts
-var createStatusContent = (glyph, glyphColor, labelText) => {
-  const group = document.createElement("span");
-  Object.assign(group.style, {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px"
+var ARROW_WIDTH_PX = 16;
+var ARROW_HEIGHT_PX = 8;
+var TARGET_GAP_PX = 12;
+var PILL_HEIGHT_PX = 28;
+var FADE_MS = 125;
+var SVG_NS = "http://www.w3.org/2000/svg";
+var REACT_GRAB_CHECK_CIRCLE_PATH = "M2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12ZM17.7071 10.7071C18.0976 10.3166 18.0976 9.68342 17.7071 9.29289C17.3166 8.90237 16.6834 8.90237 16.2929 9.29289L11 14.5858L8.70711 12.2929C8.31658 11.9024 7.68342 11.9024 7.29289 12.2929C6.90237 12.6834 6.90237 13.3166 7.29289 13.7071L10.2929 16.7071C10.6834 17.0976 11.3166 17.0976 11.7071 16.7071L17.7071 10.7071Z";
+var svgElement = (tag, attributes) => {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+  return element;
+};
+var createStatusIcon = (kind, color) => {
+  const svg = svgElement("svg", {
+    viewBox: "0 0 24 24",
+    width: "14",
+    height: "14",
+    "aria-hidden": "true"
   });
-  const mark = document.createElement("span");
-  mark.textContent = glyph;
-  mark.style.color = glyphColor;
-  mark.style.fontWeight = "600";
-  group.appendChild(mark);
-  const label = document.createElement("span");
-  label.textContent = labelText;
-  group.appendChild(label);
-  return group;
+  svg.style.flexShrink = "0";
+  svg.style.color = color;
+  if (kind === "check") {
+    svg.append(
+      svgElement("path", {
+        fill: "currentColor",
+        "fill-rule": "evenodd",
+        "clip-rule": "evenodd",
+        d: REACT_GRAB_CHECK_CIRCLE_PATH
+      })
+    );
+    return svg;
+  }
+  svg.append(svgElement("circle", { cx: "12", cy: "12", r: "10", fill: "currentColor" }));
+  const mark = kind === "minus" ? "M8 12h8" : "M9 9l6 6M15 9l-6 6";
+  svg.append(
+    svgElement("path", {
+      d: mark,
+      fill: "none",
+      stroke: rg.panelBg,
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    })
+  );
+  return svg;
+};
+var createArrow = () => {
+  const arrow = svgElement("svg", {
+    width: String(ARROW_WIDTH_PX),
+    height: String(ARROW_HEIGHT_PX),
+    viewBox: `0 0 ${ARROW_WIDTH_PX} ${ARROW_HEIGHT_PX}`,
+    "aria-hidden": "true"
+  });
+  arrow.append(
+    svgElement("path", {
+      fill: rg.panelBg,
+      d: "M0 8 L7.2929 0.7071 A1 1 0 0 1 8.7071 0.7071 L16 8 Z"
+    })
+  );
+  Object.assign(arrow.style, { position: "absolute", display: "block" });
+  return arrow;
 };
 var createHintPill = () => {
-  const pill = document.createElement("div");
-  pill.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
-  pill.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
-  pill.setAttribute(UI_ATTRIBUTE, "true");
-  pill.setAttribute("role", "status");
-  Object.assign(pill.style, {
+  const root = document.createElement("div");
+  root.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
+  root.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
+  root.setAttribute(UI_ATTRIBUTE, "true");
+  root.setAttribute("role", "status");
+  root.setAttribute("aria-live", "polite");
+  adoptReactGrabTheme(root);
+  Object.assign(root.style, {
     position: "fixed",
     pointerEvents: "none",
     top: "0",
     left: "0",
     zIndex: String(OVERLAY_Z_INDEX),
+    fontFamily: rg.font,
+    fontSize: "13px",
+    WebkitFontSmoothing: "antialiased",
+    userSelect: "none",
+    filter: `drop-shadow(${rg.shadow})`,
+    visibility: "hidden",
+    opacity: "0",
+    transition: `opacity ${FADE_MS}ms ease-out`
+  });
+  const arrow = createArrow();
+  const pill = document.createElement("div");
+  Object.assign(pill.style, {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
-    padding: "6px 9px",
-    borderRadius: "7px",
-    background: "rgba(24, 24, 27, 0.94)",
-    color: "#e4e4e7",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    fontSize: "11px",
-    lineHeight: "1",
-    whiteSpace: "nowrap",
-    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.4)",
-    userSelect: "none",
-    visibility: "hidden"
+    gap: "4px",
+    boxSizing: "border-box",
+    height: `${PILL_HEIGHT_PX}px`,
+    padding: "6px 10px 6px 8px",
+    borderRadius: "9999px",
+    background: rg.panelBg,
+    whiteSpace: "nowrap"
   });
-  document.body.appendChild(pill);
-  const setContent = (children) => {
-    pill.replaceChildren(...children);
+  root.append(arrow, pill);
+  document.body.appendChild(root);
+  const setContent = (icon, labelText) => {
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    Object.assign(label.style, {
+      color: rg.text,
+      fontSize: "13px",
+      lineHeight: "16px",
+      fontWeight: "500"
+    });
+    pill.replaceChildren(icon, label);
   };
   return {
-    showCopied: () => {
-      setContent([createStatusContent("\u2713", "#4ade80", "Copied")]);
+    showCopied: (label = "Copied") => {
+      setContent(createStatusIcon("check", rg.text85), label);
     },
     showNoChange: () => {
-      setContent([createStatusContent("\u2013", "#a1a1aa", "No text change")]);
+      setContent(createStatusIcon("minus", rg.textMuted), "No text change");
     },
     showError: (message) => {
-      setContent([createStatusContent("\u2715", "#f87171", message)]);
+      setContent(createStatusIcon("cross", rg.errorText), message);
     },
     reposition: (targetRect) => {
-      const pillRect = pill.getBoundingClientRect();
-      let top = targetRect.bottom + HINT_PILL_OFFSET_PX;
-      if (top + pillRect.height > window.innerHeight - HINT_PILL_VIEWPORT_MARGIN_PX) {
-        top = targetRect.top - pillRect.height - HINT_PILL_OFFSET_PX;
-      }
-      top = Math.max(top, HINT_PILL_VIEWPORT_MARGIN_PX);
-      const maxLeft = window.innerWidth - pillRect.width - HINT_PILL_VIEWPORT_MARGIN_PX;
-      const left = Math.min(Math.max(targetRect.left, HINT_PILL_VIEWPORT_MARGIN_PX), maxLeft);
-      pill.style.top = `${top}px`;
-      pill.style.left = `${left}px`;
-      pill.style.visibility = "visible";
+      const width = root.getBoundingClientRect().width;
+      const margin = HINT_PILL_VIEWPORT_MARGIN_PX;
+      const centerX = targetRect.left + targetRect.width / 2;
+      let top = targetRect.bottom + TARGET_GAP_PX;
+      const fitsBelow = top + PILL_HEIGHT_PX <= window.innerHeight - margin;
+      if (!fitsBelow) top = targetRect.top - TARGET_GAP_PX - PILL_HEIGHT_PX;
+      top = Math.max(top, margin);
+      const maxLeft = window.innerWidth - width - margin;
+      const left = Math.min(Math.max(centerX - width / 2, margin), maxLeft);
+      const arrowInset = PILL_HEIGHT_PX / 2 + ARROW_WIDTH_PX / 2;
+      const arrowCenter = Math.min(Math.max(centerX - left, arrowInset), width - arrowInset);
+      Object.assign(arrow.style, {
+        left: `${arrowCenter - ARROW_WIDTH_PX / 2}px`,
+        top: fitsBelow ? `${1 - ARROW_HEIGHT_PX}px` : `${PILL_HEIGHT_PX - 1}px`,
+        transform: fitsBelow ? "none" : "rotate(180deg)"
+      });
+      root.style.top = `${top}px`;
+      root.style.left = `${left}px`;
+      root.style.visibility = "visible";
+      requestAnimationFrame(() => {
+        root.style.opacity = "1";
+      });
     },
     destroy: () => {
-      pill.remove();
+      root.style.opacity = "0";
+      window.setTimeout(() => root.remove(), FADE_MS);
     }
   };
 };
@@ -819,7 +936,7 @@ var createTextPlugin = () => {
 };
 
 // src/deck-batch-icon.ts
-var SVG_NS = "http://www.w3.org/2000/svg";
+var SVG_NS2 = "http://www.w3.org/2000/svg";
 var REDUCE_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 var STACK_LAYER_PATHS = {
   back: "M5.566 4.657A4.505 4.505 0 0 1 6.75 4.5h10.5c.41 0 .806.055 1.183.157A3 3 0 0 0 15.75 3h-7.5a3 3 0 0 0-2.684 1.657Z",
@@ -849,7 +966,7 @@ var applyPose = (element, pose, origin) => {
   element.style.transform = `translate(${pose.tx}px, ${pose.ty}px) scale(${pose.scale})`;
 };
 var createDeckBatchIcon = () => {
-  const svg = document.createElementNS(SVG_NS, "svg");
+  const svg = document.createElementNS(SVG_NS2, "svg");
   svg.setAttribute("width", "14");
   svg.setAttribute("height", "14");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -860,8 +977,8 @@ var createDeckBatchIcon = () => {
   svg.style.overflow = "visible";
   const layerNodes = Object.keys(STACK_LAYER_PATHS).map(
     (key) => {
-      const group = document.createElementNS(SVG_NS, "g");
-      const path = document.createElementNS(SVG_NS, "path");
+      const group = document.createElementNS(SVG_NS2, "g");
+      const path = document.createElementNS(SVG_NS2, "path");
       path.setAttribute("d", STACK_LAYER_PATHS[key]);
       group.append(path);
       svg.append(group);
@@ -894,9 +1011,9 @@ var createDeckBatchIcon = () => {
 };
 
 // src/deck-icons.ts
-var SVG_NS2 = "http://www.w3.org/2000/svg";
+var SVG_NS3 = "http://www.w3.org/2000/svg";
 var createToolbarIconSvg = () => {
-  const svg = document.createElementNS(SVG_NS2, "svg");
+  const svg = document.createElementNS(SVG_NS3, "svg");
   svg.setAttribute("width", "14");
   svg.setAttribute("height", "14");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -909,7 +1026,7 @@ var createToolbarIconSvg = () => {
 var createFilledToolbarIcon = (paths) => {
   const svg = createToolbarIconSvg();
   for (const { d, fillRule, clipRule } of [paths].flat()) {
-    const path = document.createElementNS(SVG_NS2, "path");
+    const path = document.createElementNS(SVG_NS3, "path");
     path.setAttribute("d", d);
     if (fillRule) path.setAttribute("fill-rule", fillRule);
     if (clipRule) path.setAttribute("clip-rule", clipRule);
@@ -1069,247 +1186,739 @@ var createDeckAffordance = () => {
   return { wrapper, button, setFace, setBatchActive };
 };
 
+// src/deck-preview.ts
+var stripFence = (content) => {
+  const fenceStart = content.indexOf("```");
+  if (fenceStart === -1) {
+    return { comment: null, body: content.trim() };
+  }
+  const comment = content.slice(0, fenceStart).trim() || null;
+  const afterFence = content.slice(fenceStart + 3);
+  const fenceEnd = afterFence.lastIndexOf("```");
+  const inner = fenceEnd === -1 ? afterFence.trim() : afterFence.slice(0, fenceEnd).replace(/^\n/, "").trim();
+  return { comment, body: inner };
+};
+var formatDeckItemPreview = (content) => {
+  const { comment, body } = stripFence(content);
+  return { comment, body: body.trim() };
+};
+
+// src/deck-summary.ts
+var CONTEXT_WORDS = 3;
+var ELLIPSIS = "\u2026";
+var OPENING_TAG_PATTERN = /<([a-z][\w-]*)\b[^>]*>/i;
+var COMPONENT_PATTERN = /(?:^|\s)in ([A-Z][\w$.]*)(?= \(at |\]|$)/m;
+var decodeEntities = (value) => value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+var readTextBlock = (content, label) => {
+  const block = content.match(new RegExp(`^${label}:\\n"""\\n([\\s\\S]*?)\\n"""$`, "m"));
+  if (block) return block[1];
+  const inline = content.match(new RegExp(`^${label}: "(.*)"$`, "m"));
+  return inline ? inline[1] : null;
+};
+var tokenize = (text) => text.match(/\s+|[\p{L}\p{N}\p{M}'’_-]+|[^\s\p{L}\p{N}\p{M}]/gu) ?? [];
+var isWord = (token) => /[\p{L}\p{N}]/u.test(token);
+var takeContext = (tokens, fromEnd) => {
+  const ordered = fromEnd ? [...tokens].reverse() : tokens;
+  const kept = [];
+  let words = 0;
+  for (const token of ordered) {
+    if (isWord(token)) {
+      if (words === CONTEXT_WORDS) break;
+      words += 1;
+    }
+    kept.push(token);
+  }
+  const isTruncated = kept.length < tokens.length;
+  const text = (fromEnd ? kept.reverse() : kept).join("");
+  if (!isTruncated) return text;
+  return fromEnd ? `${ELLIPSIS}${text.trimStart()}` : `${text.trimEnd()}${ELLIPSIS}`;
+};
+var MAX_DIFF_CELLS = 4e4;
+var diffTokens = (a, b) => {
+  if (a.length * b.length > MAX_DIFF_CELLS) {
+    return [
+      { kind: "removed", tokens: a },
+      { kind: "added", tokens: b }
+    ];
+  }
+  const lengths = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i2 = a.length - 1; i2 >= 0; i2 -= 1) {
+    for (let j2 = b.length - 1; j2 >= 0; j2 -= 1) {
+      lengths[i2][j2] = a[i2] === b[j2] ? lengths[i2 + 1][j2 + 1] + 1 : Math.max(lengths[i2 + 1][j2], lengths[i2][j2 + 1]);
+    }
+  }
+  const ops = [];
+  const push = (kind, token) => {
+    const last = ops[ops.length - 1];
+    if (last?.kind === kind) last.tokens.push(token);
+    else ops.push({ kind, tokens: [token] });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      push("same", a[i]);
+      i += 1;
+      j += 1;
+    } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
+      push("removed", a[i]);
+      i += 1;
+    } else {
+      push("added", b[j]);
+      j += 1;
+    }
+  }
+  while (i < a.length) push("removed", a[i++]);
+  while (j < b.length) push("added", b[j++]);
+  return ops;
+};
+var countWords = (tokens) => tokens.filter(isWord).length;
+var diffWords = (before, after) => {
+  const ops = diffTokens(tokenize(before), tokenize(after));
+  const parts = [];
+  const pushSame = (text) => {
+    if (!text) return;
+    const last = parts[parts.length - 1];
+    if (last?.kind === "same") last.text += text;
+    else parts.push({ kind: "same", text });
+  };
+  const pushChange = (kind, text) => {
+    const word = text.trim();
+    if (!word) {
+      if (kind === "added") pushSame(text);
+      return;
+    }
+    const [, leading = "", trailing = ""] = text.match(/^(\s*)[\s\S]*?(\s*)$/) ?? [];
+    pushSame(leading);
+    const previous = parts[parts.length - 1];
+    if (!leading && previous && previous.kind !== "same") pushSame(" ");
+    parts.push({ kind, text: word });
+    pushSame(trailing);
+  };
+  for (const [index, op] of ops.entries()) {
+    if (op.kind !== "same") {
+      pushChange(op.kind, op.tokens.join(""));
+      continue;
+    }
+    if (index === 0) {
+      pushSame(takeContext(op.tokens, true));
+    } else if (index === ops.length - 1) {
+      pushSame(takeContext(op.tokens, false));
+    } else if (countWords(op.tokens) > CONTEXT_WORDS * 2) {
+      const head = takeContext(op.tokens, false);
+      const tail = takeContext(op.tokens, true);
+      pushSame(`${head.slice(0, -ELLIPSIS.length)} ${ELLIPSIS} ${tail.slice(ELLIPSIS.length)}`);
+    } else {
+      pushSame(op.tokens.join(""));
+    }
+  }
+  return parts;
+};
+var readReference = (content) => {
+  const tag = content.match(OPENING_TAG_PATTERN);
+  if (!tag || tag.index === void 0) return { element: null, text: null, component: null };
+  const rest = content.slice(tag.index);
+  const component = rest.match(COMPONENT_PATTERN);
+  const snippet = component?.index === void 0 ? rest : rest.slice(0, component.index);
+  const text = decodeEntities(snippet.replace(/<[^>]*>/g, " ").replace(/[\[\]`]/g, "")).replace(/\s+/g, " ").trim();
+  return {
+    element: tag[1].toLowerCase(),
+    text: text || null,
+    component: component?.[1] ?? null
+  };
+};
+var firstLine = (text) => text.split("\n").map((line) => line.trim()).find((line) => line && !/^`{3,}$/.test(line)) ?? "";
+var summarizeDeckItem = (content) => {
+  const reference = readReference(content);
+  const location = { element: reference.element, component: reference.component };
+  const before = readTextBlock(content, "BEFORE");
+  const after = readTextBlock(content, "AFTER");
+  if (before !== null && after !== null) {
+    return { kind: "text", parts: diffWords(before, after), ...location };
+  }
+  const { comment, body } = formatDeckItemPreview(content);
+  if (comment) {
+    return { kind: "comment", parts: [{ kind: "same", text: comment }], ...location };
+  }
+  if (reference.element) {
+    const label = reference.text ?? `<${reference.element}>`;
+    return { kind: "grab", parts: [{ kind: "same", text: label }], ...location };
+  }
+  return { kind: "note", parts: [{ kind: "same", text: firstLine(body) }], ...location };
+};
+var DECK_ITEM_KIND_LABEL = {
+  text: "Text edit",
+  comment: "Comment",
+  grab: "Grab",
+  note: "Note"
+};
+
 // src/deck-panel.ts
+var ITEM_ID_ATTR = "data-deck-item-id";
+var STYLE_ELEMENT_ID2 = "react-grab-deck-panel-styles";
+var SVG_NS4 = "http://www.w3.org/2000/svg";
+var part = (name) => `[${DECK_UI_ATTRIBUTE}="${name}"]`;
+var P = part("panel");
+var PANEL_WIDTH_PX = 320;
+var PANEL_ENTER_MS = 220;
+var PANEL_EXIT_MS = 120;
+var HIGHLIGHT_MS = 75;
+var PANEL_CSS = `
+${P} *:not(svg, svg *) { all: revert; }
+${P} {
+  position: fixed;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(${PANEL_WIDTH_PX}px, calc(100vw - 24px));
+  max-height: min(400px, 52vh);
+  overflow: hidden;
+  border-radius: 14px;
+  corner-shape: superellipse(1.25);
+  background: ${rg.panelBg};
+  color: ${rg.text};
+  filter: drop-shadow(${rg.shadow});
+  font: 500 13px/16px ${rg.font};
+  letter-spacing: normal;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  z-index: 2147483645;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition: opacity ${PANEL_EXIT_MS}ms ${rg.easeDrawer}, transform ${PANEL_EXIT_MS}ms ${rg.easeDrawer};
+}
+${P}[data-state="open"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity ${PANEL_ENTER_MS}ms ${rg.easeSpring}, transform ${PANEL_ENTER_MS}ms ${rg.easeSpring};
+}
+${P} [hidden] { display: none !important; }
+${P} *, ${P} *::before, ${P} *::after { box-sizing: border-box; }
+${P} button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+${P} button:focus-visible {
+  outline: 1px solid ${rg.borderButton};
+  outline-offset: 1px;
+}
+
+${P} ${part("panel-header")} {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+}
+${P} ${part("panel-title")} { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+${P} ${part("panel-count")} { color: ${rg.textMuted}; font-variant-numeric: tabular-nums; }
+${P} ${part("clear-all")},
+${P} ${part("panel-back")} {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: ${rg.textMuted};
+  transition: color 150ms ease-out, background-color 150ms ease-out;
+}
+${P} ${part("panel-back")} { gap: 2px; margin-left: -4px; padding: 0 6px 0 2px; color: ${rg.text}; }
+${P} ${part("clear-all")}:hover,
+${P} ${part("panel-back")}:hover { color: ${rg.text}; background: ${rg.surfaceHover}; }
+${P} ${part("panel-position")} {
+  padding-right: 4px;
+  color: ${rg.textMuted};
+  font-variant-numeric: tabular-nums;
+}
+
+${P} ${part("panel-list")} {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 0.5px solid ${rg.borderSubtle};
+  scrollbar-width: thin;
+  scrollbar-color: ${rg.borderButton} transparent;
+}
+${P} ${part("panel-highlight")} {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: ${rg.surfaceHover};
+  opacity: 0;
+  pointer-events: none;
+  transition: top ${HIGHLIGHT_MS}ms ease-out, height ${HIGHLIGHT_MS}ms ease-out, opacity ${HIGHLIGHT_MS}ms ease-out;
+}
+${P} ${part("panel-item")} {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+}
+${P} ${part("panel-index")} {
+  flex: none;
+  min-width: 12px;
+  color: ${rg.textMuted};
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+${P} ${part("panel-summary")} {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+}
+${P} ${part("panel-summary")}::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+${P} ${part("panel-summary")}:focus-visible { outline: none; }
+${P} ${part("panel-item")}:has(${part("panel-summary")}:focus-visible) {
+  box-shadow: inset 0 0 0 1px ${rg.borderButton};
+}
+${P} ${part("panel-summary-text")} {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: ${rg.text85};
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+${P} ${part("panel-summary-text")}[data-kind="text"] { color: ${rg.textMuted}; }
+${P} ${part("panel-summary-text")} del {
+  color: ${rg.textMuted};
+  text-decoration: line-through;
+  text-decoration-color: ${rg.textMuted};
+}
+${P} ${part("panel-summary-text")} ins {
+  color: ${rg.text};
+  font-weight: 500;
+  text-decoration: none;
+}
+${P} ${part("panel-meta")} {
+  overflow: hidden;
+  color: ${rg.textMuted};
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+${P} ${part("panel-preview")} {
+  flex: 1;
+  min-width: 0;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: ${rg.text};
+  font: 400 13px/16px ${rg.font};
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+${P}[data-editing] ${part("panel-item")}:not([data-editing]) { display: none; }
+${P} ${part("delete-item")} {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: ${rg.textMuted};
+  opacity: 0;
+  transition: opacity 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
+}
+${P} ${part("panel-item")}:hover ${part("delete-item")},
+${P} ${part("panel-item")}:focus-within ${part("delete-item")} { opacity: 1; }
+${P} ${part("delete-item")}:hover { color: ${rg.text}; background: ${rg.surfaceActive}; }
+
+${P} ${part("panel-footer")} {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 6px 6px 8px;
+  border-top: 0.5px solid ${rg.borderSubtle};
+}
+${P} ${part("panel-mode-toggle")} {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  color: ${rg.textMuted};
+  transition: color 150ms ease-out;
+}
+${P} ${part("panel-mode-toggle")}:hover,
+${P} ${part("panel-mode-toggle")}[aria-pressed="true"] { color: ${rg.text}; }
+${P} ${part("panel-switch")} {
+  position: relative;
+  width: 22px;
+  height: 12px;
+  border-radius: 9999px;
+  background: ${rg.surfaceActive};
+  transition: background-color 200ms ${rg.easeDrawer};
+}
+${P} ${part("panel-switch")}::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: ${rg.textMuted};
+  transition: transform 200ms ${rg.easeDrawer}, background-color 200ms ${rg.easeDrawer};
+}
+${P} [aria-pressed="true"] ${part("panel-switch")} { background: ${rg.text}; }
+${P} [aria-pressed="true"] ${part("panel-switch")}::after { transform: translateX(10px); background: ${rg.panelBg}; }
+${P} ${part("copy-all")} {
+  height: 28px;
+  padding: 0 12px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 9999px;
+  background: ${rg.submitBg};
+  color: ${rg.submitFg};
+  transition: transform 400ms ${rg.easeSpring};
+}
+${P} ${part("copy-all")}:active {
+  transform: scale(0.97);
+  transition: transform 60ms cubic-bezier(0, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ${P}, ${P} *, ${P} *::after { transition: none !important; animation: none !important; }
+}
+`;
+var ensurePanelStyles = () => {
+  if (document.getElementById(STYLE_ELEMENT_ID2)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ELEMENT_ID2;
+  style.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
+  style.textContent = PANEL_CSS;
+  document.head.appendChild(style);
+};
 var markPanelControl = (element) => {
   element.setAttribute(REACT_GRAB_IGNORE_ATTRIBUTE, "true");
   element.setAttribute(REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE, "true");
 };
-var t = {
-  bg: "var(--rg-panel-bg, #161616)",
-  text: "var(--rg-text-primary, #ffffff)",
-  textMuted: "var(--rg-text-secondary, #a7a7a7)",
-  border: "var(--rg-border-subtle, rgba(255, 255, 255, 0.1))",
-  borderFocus: "var(--rg-border-button, rgba(255, 255, 255, 0.2))",
-  submitBg: "var(--rg-submit-bg, #ffffff)",
-  submitFg: "var(--rg-submit-fg, #161616)",
-  shadow: "var(--rg-shadow, 0 2px 8px rgba(0, 0, 0, 0.08))",
-  mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-  sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+var createPart = (tag, name) => {
+  const element = document.createElement(tag);
+  element.setAttribute(DECK_UI_ATTRIBUTE, name);
+  return element;
 };
-var PANEL_RADIUS = "10px";
-var PANEL_PAD = "12px";
-var ITEM_GAP = "16px";
-var FIELD_LINE = "1.45";
-var ITEM_ID_ATTR = "data-deck-item-id";
-var applyFocusVisibleRing = (element) => {
-  let suppressRing = false;
-  element.addEventListener("mousedown", () => {
-    suppressRing = true;
-  });
-  element.addEventListener("focus", () => {
-    requestAnimationFrame(() => {
-      if (!suppressRing && element.matches(":focus-visible")) {
-        element.style.outline = `1px solid ${t.borderFocus}`;
-        element.style.outlineOffset = "2px";
-      }
-      suppressRing = false;
-    });
-  });
-  element.addEventListener("blur", () => {
-    element.style.outline = "none";
-    element.style.outlineOffset = "0";
-  });
-};
-var createDeckPanel = () => {
-  const panel = document.createElement("div");
-  panel.setAttribute(DECK_UI_ATTRIBUTE, "panel");
-  markPanelControl(panel);
-  Object.assign(panel.style, {
-    display: "none",
-    position: "fixed",
-    flexDirection: "column",
-    minWidth: "min(360px, calc(100vw - 24px))",
-    maxWidth: "min(400px, calc(100vw - 24px))",
-    maxHeight: "min(400px, 52vh)",
-    overflow: "hidden",
-    borderRadius: PANEL_RADIUS,
-    background: t.bg,
-    color: t.text,
-    border: `1px solid ${t.border}`,
-    boxShadow: t.shadow,
-    font: `12px/${FIELD_LINE} ${t.sans}`,
-    WebkitFontSmoothing: "antialiased",
-    zIndex: "2147483645"
-  });
-  return panel;
-};
-var createItemField = (itemId, content, handlers) => {
-  const field = document.createElement("textarea");
-  field.value = content;
-  field.rows = 3;
-  field.setAttribute(ITEM_ID_ATTR, itemId);
-  markPanelControl(field);
-  Object.assign(field.style, {
-    flex: "1",
-    minWidth: "0",
-    boxSizing: "border-box",
-    margin: "0",
-    padding: "0",
-    border: "none",
-    borderRadius: "0",
-    background: "transparent",
-    color: t.text,
-    fontFamily: t.mono,
-    fontSize: "11px",
-    lineHeight: FIELD_LINE,
-    resize: "vertical",
-    minHeight: "48px",
-    outline: "none"
-  });
-  applyFocusVisibleRing(field);
-  field.addEventListener("blur", () => {
-    const next = field.value;
-    if (!next.trim()) {
-      handlers.onRemoveItem(itemId);
-      return;
-    }
-    handlers.onUpdateItem(itemId, next);
-  });
-  field.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      event.preventDefault();
-      field.blur();
-    }
-  });
-  field.addEventListener("mousedown", (event) => event.stopPropagation());
-  field.addEventListener("pointerdown", (event) => event.stopPropagation());
-  return field;
-};
-var createIconButton = (label, uiPart, text, extra) => {
-  const button = document.createElement("button");
+var createButton = (name, label) => {
+  const button = createPart("button", name);
   button.type = "button";
-  button.setAttribute(DECK_UI_ATTRIBUTE, uiPart);
-  button.textContent = text;
   button.title = label;
   button.setAttribute("aria-label", label);
   markPanelControl(button);
-  Object.assign(button.style, {
-    position: "relative",
-    flex: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: "24px",
-    minHeight: "24px",
-    padding: "0",
-    border: "none",
-    borderRadius: "4px",
-    background: "transparent",
-    color: t.textMuted,
-    font: "inherit",
-    lineHeight: "1",
-    cursor: "pointer",
-    ...extra
-  });
-  button.addEventListener("mouseenter", () => {
-    button.style.color = t.text;
-  });
-  button.addEventListener("mouseleave", () => {
-    button.style.color = t.textMuted;
-  });
-  applyFocusVisibleRing(button);
   return button;
 };
-var createItemRow = (index, item, handlers) => {
-  const row = document.createElement("article");
-  row.setAttribute(DECK_UI_ATTRIBUTE, "panel-item");
+var createCrossIcon = () => {
+  const svg = document.createElementNS(SVG_NS4, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "10");
+  svg.setAttribute("height", "10");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS4, "path");
+  path.setAttribute("d", "M6 6l12 12M18 6L6 18");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2.5");
+  path.setAttribute("stroke-linecap", "round");
+  svg.append(path);
+  return svg;
+};
+var createChevronLeftIcon = () => {
+  const svg = document.createElementNS(SVG_NS4, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS4, "path");
+  path.setAttribute("d", "M15 18l-6-6 6-6");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+};
+var createDeckPanel = () => {
+  ensurePanelStyles();
+  const panel = createPart("div", "panel");
+  markPanelControl(panel);
+  panel.style.display = "none";
+  return panel;
+};
+var autosize = (field) => {
+  field.style.height = "auto";
+  field.style.height = `${field.scrollHeight}px`;
+};
+var renderSummary = (target, meta, content) => {
+  const summary = summarizeDeckItem(content);
+  target.setAttribute("data-kind", summary.kind);
+  target.replaceChildren(
+    ...summary.parts.map((piece) => {
+      if (piece.kind === "same") return document.createTextNode(piece.text);
+      const mark = document.createElement(piece.kind === "removed" ? "del" : "ins");
+      mark.textContent = piece.text;
+      return mark;
+    })
+  );
+  meta.textContent = [
+    DECK_ITEM_KIND_LABEL[summary.kind],
+    summary.element ? `<${summary.element}>` : null,
+    summary.component
+  ].filter(Boolean).join(" \xB7 ");
+};
+var stopHostHandlers = (element) => {
+  element.addEventListener("mousedown", (event) => event.stopPropagation());
+  element.addEventListener("pointerdown", (event) => event.stopPropagation());
+};
+var createItemRow = (item, handlers, editHandlers) => {
+  let content = item.content;
+  let field = null;
+  const row = createPart("article", "panel-item");
   row.setAttribute(ITEM_ID_ATTR, item.id);
-  Object.assign(row.style, {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px"
-  });
-  const indexLabel = document.createElement("span");
+  const indexLabel = createPart("span", "panel-index");
   indexLabel.setAttribute("data-deck-item-index", "true");
-  indexLabel.textContent = String(index + 1);
-  Object.assign(indexLabel.style, {
-    flex: "none",
-    width: "14px",
-    paddingTop: "1px",
-    color: t.textMuted,
-    fontSize: "11px",
-    fontWeight: "600",
-    fontVariantNumeric: "tabular-nums",
-    textAlign: "right"
-  });
-  const field = createItemField(item.id, item.content, handlers);
-  field.setAttribute(DECK_UI_ATTRIBUTE, "panel-preview");
-  const deleteButton = createIconButton("Remove from deck", "delete-item", "\xD7", {
-    fontSize: "16px",
-    marginTop: "-1px"
-  });
+  const summaryButton = createPart("button", "panel-summary");
+  summaryButton.type = "button";
+  summaryButton.title = "Edit this item";
+  summaryButton.setAttribute("aria-expanded", "false");
+  markPanelControl(summaryButton);
+  stopHostHandlers(summaryButton);
+  const summaryText = createPart("span", "panel-summary-text");
+  const meta = createPart("span", "panel-meta");
+  summaryButton.append(summaryText, meta);
+  const deleteButton = createButton("delete-item", "Remove from deck");
+  deleteButton.append(createCrossIcon());
   deleteButton.setAttribute(ITEM_ID_ATTR, item.id);
   deleteButton.addEventListener("click", (event) => {
     event.stopPropagation();
     handlers.onRemoveItem(item.id);
   });
-  row.append(indexLabel, field, deleteButton);
-  return row;
+  const collapse = () => {
+    const editor = field;
+    if (!editor) return;
+    field = null;
+    const next = editor.value;
+    editor.remove();
+    summaryButton.hidden = false;
+    summaryButton.setAttribute("aria-expanded", "false");
+    row.removeAttribute("data-editing");
+    editHandlers.onEditEnd(row);
+    if (!next.trim()) {
+      handlers.onRemoveItem(item.id);
+      return;
+    }
+    content = next.trim();
+    renderSummary(summaryText, meta, content);
+    handlers.onUpdateItem(item.id, next);
+  };
+  const close = () => {
+    const editor = field;
+    collapse();
+    if (editor && row.isConnected) summaryButton.focus({ preventScroll: true });
+  };
+  const expand = () => {
+    if (field) return;
+    field = createPart("textarea", "panel-preview");
+    field.value = content;
+    field.rows = 1;
+    field.spellcheck = false;
+    field.setAttribute(ITEM_ID_ATTR, item.id);
+    field.setAttribute("aria-label", "Deck item");
+    markPanelControl(field);
+    stopHostHandlers(field);
+    field.addEventListener("input", () => {
+      if (field) autosize(field);
+    });
+    field.addEventListener("blur", collapse);
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    });
+    summaryButton.hidden = true;
+    summaryButton.setAttribute("aria-expanded", "true");
+    row.setAttribute("data-editing", "");
+    editHandlers.onEditStart(row);
+    summaryButton.after(field);
+    autosize(field);
+    field.focus({ preventScroll: true });
+    field.setSelectionRange(0, 0);
+    row.scrollIntoView({ block: "nearest" });
+  };
+  summaryButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    expand();
+  });
+  row.append(indexLabel, summaryButton, deleteButton);
+  const setContent = (next) => {
+    if (field || next === content) return;
+    content = next;
+    renderSummary(summaryText, meta, content);
+  };
+  renderSummary(summaryText, meta, content);
+  return {
+    row,
+    setIndex: (index) => {
+      indexLabel.textContent = String(index + 1);
+    },
+    setContent,
+    field: () => field,
+    close
+  };
+};
+var createHoverHighlight = (list) => {
+  const highlight = createPart("div", "panel-highlight");
+  highlight.setAttribute("aria-hidden", "true");
+  let target = null;
+  const place = (row) => {
+    highlight.style.top = `${row.offsetTop}px`;
+    highlight.style.height = `${row.offsetHeight}px`;
+  };
+  const show = (row) => {
+    if (row.hasAttribute("data-editing")) {
+      hide();
+      return;
+    }
+    const wasHidden = target === null;
+    target = row;
+    if (wasHidden) {
+      highlight.style.transitionProperty = "opacity";
+      place(row);
+      void highlight.offsetHeight;
+      highlight.style.transitionProperty = "";
+    } else {
+      place(row);
+    }
+    highlight.style.opacity = "1";
+  };
+  const hide = () => {
+    target = null;
+    highlight.style.opacity = "0";
+  };
+  const refresh = () => {
+    if (target?.isConnected) place(target);
+    else if (target) hide();
+  };
+  const rowFrom = (node) => node instanceof Element ? node.closest(part("panel-item")) : null;
+  list.addEventListener("pointerover", (event) => {
+    const row = rowFrom(event.target);
+    if (row && row !== target) show(row);
+  });
+  list.addEventListener("pointerleave", hide);
+  list.addEventListener("focusin", (event) => {
+    const row = rowFrom(event.target);
+    if (row) show(row);
+  });
+  list.addEventListener("focusout", (event) => {
+    if (!rowFrom(event.relatedTarget)) hide();
+  });
+  return { element: highlight, hide, refresh };
 };
 var createDeckPanelView = () => {
   const panel = createDeckPanel();
-  const scroll = document.createElement("div");
-  Object.assign(scroll.style, {
-    flex: "1",
-    minHeight: "0",
-    overflowY: "auto",
-    padding: PANEL_PAD,
-    display: "flex",
-    flexDirection: "column",
-    gap: ITEM_GAP
-  });
-  const footer = document.createElement("footer");
-  Object.assign(footer.style, {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "12px",
-    padding: `0 ${PANEL_PAD} ${PANEL_PAD}`,
-    flexShrink: "0"
-  });
-  const meta = document.createElement("div");
-  Object.assign(meta.style, {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    minWidth: "0",
-    color: t.textMuted,
-    fontSize: "11px"
-  });
-  const countLabel = document.createElement("span");
-  const separator = document.createElement("span");
-  separator.textContent = "\xB7";
-  separator.setAttribute("aria-hidden", "true");
-  const modeButton = createIconButton("Turn batch mode off", "panel-mode-toggle", "Batch on", {
-    fontSize: "11px",
-    minWidth: "0",
-    minHeight: "24px",
-    padding: "4px 0"
-  });
-  const clearButton = createIconButton("Clear all deck items", "clear-all", "Clear", {
-    fontSize: "11px",
-    minWidth: "0",
-    minHeight: "24px",
-    padding: "4px 0"
-  });
-  const copyButton = createIconButton("Copy all deck items", "copy-all", "Copy all", {
-    flex: "none",
-    padding: "6px 10px",
-    borderRadius: "6px",
-    background: t.submitBg,
-    color: t.submitFg,
-    fontSize: "12px",
-    fontWeight: "600",
-    minWidth: "0"
-  });
-  copyButton.addEventListener("mouseenter", () => {
-    copyButton.style.color = t.submitFg;
-  });
-  copyButton.addEventListener("mouseleave", () => {
-    copyButton.style.color = t.submitFg;
-  });
+  const header = createPart("div", "panel-header");
+  const title = createPart("div", "panel-title");
+  const titleLabel = document.createElement("span");
+  titleLabel.textContent = "Deck";
+  const countLabel = createPart("span", "panel-count");
+  title.append(titleLabel, countLabel);
+  const clearButton = createButton("clear-all", "Clear all deck items");
+  clearButton.textContent = "Clear";
+  const backButton = createButton("panel-back", "Back to all items");
+  backButton.title = "Back to all items (Esc)";
+  const backLabel = document.createElement("span");
+  backLabel.textContent = "All items";
+  backButton.append(createChevronLeftIcon(), backLabel);
+  backButton.hidden = true;
+  const positionLabel = createPart("span", "panel-position");
+  positionLabel.hidden = true;
+  header.append(backButton, title, positionLabel, clearButton);
+  const list = createPart("div", "panel-list");
+  const highlight = createHoverHighlight(list);
+  const rows = createPart("div", "panel-rows");
+  list.append(highlight.element, rows);
+  const footer = createPart("div", "panel-footer");
+  const modeButton = createButton("panel-mode-toggle", "Turn batch mode off");
+  const modeLabel = document.createElement("span");
+  modeLabel.textContent = "Batch";
+  const modeSwitch = createPart("span", "panel-switch");
+  modeSwitch.setAttribute("aria-hidden", "true");
+  modeButton.append(modeLabel, modeSwitch);
+  const copyButton = createButton("copy-all", "Copy all deck items");
+  copyButton.textContent = "Copy all";
+  footer.append(modeButton, copyButton);
+  panel.append(header, list, footer);
   let footerHandlers = null;
+  const rowsById = /* @__PURE__ */ new Map();
+  let editingRow = null;
+  const renderHeader = () => {
+    const isEditing = editingRow !== null;
+    backButton.hidden = !isEditing;
+    title.hidden = isEditing;
+    clearButton.hidden = isEditing;
+    positionLabel.hidden = !isEditing;
+    if (isEditing) {
+      const index = Array.prototype.indexOf.call(rows.children, editingRow);
+      positionLabel.textContent = `${index + 1} of ${rows.children.length}`;
+    }
+  };
+  const editHandlers = {
+    onEditStart: (row) => {
+      editingRow = row;
+      panel.setAttribute("data-editing", "");
+      highlight.hide();
+      renderHeader();
+    },
+    onEditEnd: (row) => {
+      if (editingRow !== row) return;
+      editingRow = null;
+      panel.removeAttribute("data-editing");
+      renderHeader();
+    }
+  };
+  backButton.addEventListener("mousedown", (event) => event.preventDefault());
+  backButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const id = editingRow?.getAttribute(ITEM_ID_ATTR);
+    if (id) rowsById.get(id)?.close();
+  });
   modeButton.addEventListener("click", (event) => {
     event.stopPropagation();
     footerHandlers?.onToggleMode();
@@ -1322,69 +1931,56 @@ var createDeckPanelView = () => {
     event.stopPropagation();
     footerHandlers?.onCopyAll();
   });
-  const modeSeparator = separator.cloneNode(true);
-  meta.append(countLabel, separator, modeButton, modeSeparator, clearButton);
-  footer.append(meta, copyButton);
-  panel.append(scroll, footer);
-  const getRowField = (row) => row.querySelector(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
-  let batchActive = true;
-  const paintMode = () => {
-    modeButton.style.color = batchActive ? t.text : t.textMuted;
-  };
   const setBatchActive = (active) => {
-    batchActive = active;
-    modeButton.textContent = active ? "Batch on" : "Batch off";
-    modeButton.title = active ? "Turn batch mode off" : "Turn batch mode on";
-    modeButton.setAttribute("aria-label", modeButton.title);
+    modeButton.title = active ? "Batch mode on: grabs queue in the deck" : "Batch mode off: grabs copy to the clipboard only";
+    modeButton.setAttribute("aria-label", active ? "Turn batch mode off" : "Turn batch mode on");
     modeButton.setAttribute("aria-pressed", String(active));
-    paintMode();
   };
-  modeButton.addEventListener("mouseenter", () => {
-    modeButton.style.color = t.text;
-  });
-  modeButton.addEventListener("mouseleave", paintMode);
   setBatchActive(true);
-  const hasFocusedField = () => scroll.contains(document.activeElement) && document.activeElement instanceof HTMLTextAreaElement && document.activeElement.matches(`textarea[${DECK_UI_ATTRIBUTE}="panel-preview"]`);
+  const hasFocusedField = () => rows.contains(document.activeElement) && document.activeElement instanceof HTMLTextAreaElement && document.activeElement.matches(`textarea${part("panel-preview")}`);
   const sync = (items2, handlers) => {
     if (items2.length === 0) {
-      scroll.replaceChildren();
+      rows.replaceChildren();
+      rowsById.clear();
+      editingRow = null;
+      panel.removeAttribute("data-editing");
+      renderHeader();
+      highlight.hide();
       return;
     }
     footerHandlers = handlers;
-    countLabel.textContent = `${items2.length} ${items2.length === 1 ? "item" : "items"}`;
+    adoptReactGrabTheme(panel);
+    const noun = items2.length === 1 ? "item" : "items";
+    countLabel.textContent = `${items2.length} ${noun}`;
+    copyButton.textContent = `Copy ${items2.length} ${noun}`;
+    copyButton.setAttribute("aria-label", `Copy all ${items2.length} deck ${noun}`);
+    copyButton.title = `Copy all ${items2.length} deck ${noun}`;
     const nextIds = new Set(items2.map((item) => item.id));
-    const existingRows = [...scroll.querySelectorAll(`article[${DECK_UI_ATTRIBUTE}="panel-item"]`)];
-    const rowsById = new Map(existingRows.map((row) => [row.getAttribute(ITEM_ID_ATTR), row]));
-    for (const row of existingRows) {
-      const id = row.getAttribute(ITEM_ID_ATTR);
-      if (!id || nextIds.has(id)) continue;
-      const field = getRowField(row);
-      if (field === document.activeElement) continue;
-      row.remove();
+    for (const [id, entry] of rowsById) {
+      if (nextIds.has(id) || entry.field() === document.activeElement) continue;
+      entry.row.remove();
       rowsById.delete(id);
     }
     const orderedRows = [];
     for (const [index, item] of items2.entries()) {
-      let row = rowsById.get(item.id);
-      if (!row) {
-        row = createItemRow(index, item, handlers);
-        rowsById.set(item.id, row);
+      let entry = rowsById.get(item.id);
+      if (!entry) {
+        entry = createItemRow(item, handlers, editHandlers);
+        rowsById.set(item.id, entry);
       } else {
-        const indexLabel = row.querySelector("[data-deck-item-index]");
-        if (indexLabel) indexLabel.textContent = String(index + 1);
-        const field = getRowField(row);
-        if (field && field !== document.activeElement && field.value !== item.content) {
-          field.value = item.content;
-        }
+        entry.setContent(item.content);
       }
-      orderedRows.push(row);
+      entry.setIndex(index);
+      orderedRows.push(entry.row);
     }
     for (const [index, row] of orderedRows.entries()) {
-      if (scroll.children[index] !== row) scroll.insertBefore(row, scroll.children[index] ?? null);
+      if (rows.children[index] !== row) rows.insertBefore(row, rows.children[index] ?? null);
     }
-    while (scroll.children.length > orderedRows.length) {
-      scroll.lastElementChild?.remove();
+    while (rows.children.length > orderedRows.length) {
+      rows.lastElementChild?.remove();
     }
+    renderHeader();
+    highlight.refresh();
     panel.style.display = "flex";
   };
   return { panel, hasFocusedField, setBatchActive, sync };
@@ -1435,6 +2031,9 @@ var getToolbarActionAnchor = (button) => {
   if (!button) return null;
   return button.parentElement ?? button;
 };
+var dismissReactGrabPanels = () => {
+  window.dispatchEvent(new MouseEvent("mousedown"));
+};
 var createDeckUi = (onCopyAll) => {
   let count = 0;
   let batchMode = false;
@@ -1477,10 +2076,12 @@ var createDeckUi = (onCopyAll) => {
       const panelWidth2 = panel.offsetWidth || 420;
       const left2 = edge === "left" ? toolbarBounds.right + gap : toolbarBounds.left - gap - panelWidth2;
       panel.style.left = `${Math.max(12, Math.min(left2, window.innerWidth - panelWidth2 - 12))}px`;
-      panel.style.top = `${Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12))}px`;
+      const top = Math.max(12, Math.min(rect.top, window.innerHeight - Math.min(panelHeight, 360) - 12));
+      panel.style.top = `${top}px`;
       panel.style.right = "auto";
       panel.style.bottom = "auto";
       panel.style.maxHeight = `${Math.min(360, window.innerHeight - 24)}px`;
+      panel.style.transformOrigin = `${edge === "left" ? "0" : "100%"} ${rect.top + rect.height / 2 - top}px`;
       return;
     }
     const spaceAbove = rect.top - gap;
@@ -1497,19 +2098,36 @@ var createDeckUi = (onCopyAll) => {
     left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
     panel.style.left = `${left}px`;
     panel.style.right = "auto";
+    panel.style.transformOrigin = `${rect.left + rect.width / 2 - left}px ${openUp ? "100%" : "0"}`;
     panel.style.maxHeight = openUp ? `${Math.max(160, Math.min(360, spaceAbove - 8))}px` : `${Math.max(160, Math.min(360, window.innerHeight - rect.bottom - gap - 12))}px`;
   };
+  let unmountTimer;
   const syncPanelMount = () => {
     if (panelOpen && count > 0) {
-      if (!panel.isConnected) document.body.append(panel);
+      window.clearTimeout(unmountTimer);
+      unmountTimer = void 0;
+      const isMounting = !panel.isConnected;
+      if (isMounting) {
+        panel.removeAttribute("data-state");
+        document.body.append(panel);
+      }
       panel.style.display = "flex";
       positionPanel();
       panelToggle.setAttribute("aria-expanded", "true");
+      if (isMounting) void panel.offsetHeight;
+      panel.setAttribute("data-state", "open");
       return;
     }
-    panel.style.display = "none";
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
     panelToggle.setAttribute("aria-expanded", "false");
-    if (panel.isConnected) panel.remove();
+    if (!panel.isConnected || unmountTimer !== void 0) return;
+    panel.removeAttribute("data-state");
+    unmountTimer = window.setTimeout(() => {
+      unmountTimer = void 0;
+      panel.style.display = "none";
+      panel.remove();
+    }, PANEL_EXIT_MS);
   };
   const affordanceLabel = () => {
     if (status === "flash") return "Deck copied to clipboard";
@@ -1536,10 +2154,28 @@ var createDeckUi = (onCopyAll) => {
     panelToggle.title = panelOpen ? "Close deck panel" : "Review deck items";
     panelToggle.setAttribute("aria-label", panelOpen ? "Close deck panel" : "Review deck items");
   };
+  const showCopiedPill = (copiedCount) => {
+    const pill = createHintPill();
+    pill.showCopied(`Copied ${copiedCount} ${copiedCount === 1 ? "item" : "items"}`);
+    requestAnimationFrame(() => pill.reposition(deckButton.getBoundingClientRect()));
+    window.setTimeout(() => pill.destroy(), SUCCESS_FLASH_DURATION_MS);
+  };
+  const copyAll = () => {
+    if (status !== "idle" || count === 0) return;
+    const copiedCount = count;
+    panelOpen = false;
+    setStatus("copying");
+    void onCopyAll().then((didCopy) => {
+      if (!didCopy) return;
+      showCopiedPill(copiedCount);
+      if (getDeckItems().length === 0) setStatus("flash");
+    }).catch(() => {
+    }).finally(() => {
+      if (status === "copying") setStatus("idle");
+    });
+  };
   const panelHandlers = {
-    onCopyAll: () => {
-      void onCopyAll();
-    },
+    onCopyAll: copyAll,
     onClearAll: () => {
       clearDeck();
     },
@@ -1619,14 +2255,7 @@ var createDeckUi = (onCopyAll) => {
     drag = null;
     if (wasDrag || status !== "idle") return;
     if (count > 0) {
-      panelOpen = false;
-      setStatus("copying");
-      void onCopyAll().then((didCopy) => {
-        if (didCopy && getDeckItems().length === 0) setStatus("flash");
-      }).catch(() => {
-      }).finally(() => {
-        if (status === "copying") setStatus("idle");
-      });
+      copyAll();
       return;
     }
     toggleDeckMode();
@@ -1634,6 +2263,7 @@ var createDeckUi = (onCopyAll) => {
   panelToggle.addEventListener("click", () => {
     if (count === 0) return;
     panelOpen = !panelOpen;
+    if (panelOpen) dismissReactGrabPanels();
     render();
   });
   const onViewportChange = () => {
@@ -1697,6 +2327,7 @@ var createDeckUi = (onCopyAll) => {
       window.removeEventListener("scroll", onViewportChange, true);
       window.removeEventListener("pointerdown", onPointerDownOutsidePanel, true);
       if (flashTimer !== void 0) window.clearTimeout(flashTimer);
+      window.clearTimeout(unmountTimer);
       endDragTracking();
       unsubscribeDeck();
       unsubscribeMode();
@@ -1776,12 +2407,12 @@ var measureDistances = (anchor, target) => {
 var formatMeasurement = (value) => String(Math.round(value * 10) / 10);
 
 // src/measure-overlay.ts
-var SVG_NS3 = "http://www.w3.org/2000/svg";
+var SVG_NS5 = "http://www.w3.org/2000/svg";
 var VIEWPORT_INSET_PX = 8;
 var LABEL_HEIGHT_PX = 22;
 var NEGATIVE_MARGIN_PATTERN_ID = "negative-margin";
 var svgNode = (tag, attributes) => {
-  const element = document.createElementNS(SVG_NS3, tag);
+  const element = document.createElementNS(SVG_NS5, tag);
   for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
   return element;
 };
@@ -1805,7 +2436,7 @@ var createMeasureOverlay = (control) => {
     text { font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       font-variant-numeric:tabular-nums; fill:white; }
   `;
-  const svg = document.createElementNS(SVG_NS3, "svg");
+  const svg = document.createElementNS(SVG_NS5, "svg");
   svg.setAttribute("aria-hidden", "true");
   const hatch = svgNode("pattern", {
     id: NEGATIVE_MARGIN_PATTERN_ID,
@@ -1846,7 +2477,7 @@ var createMeasureOverlay = (control) => {
     const left = Math.max(VIEWPORT_INSET_PX, Math.min(x - width / 2, innerWidth - width - VIEWPORT_INSET_PX));
     const top = Math.max(VIEWPORT_INSET_PX, Math.min(y - LABEL_HEIGHT_PX / 2, innerHeight - LABEL_HEIGHT_PX - VIEWPORT_INSET_PX));
     shape("rect", { x: left, y: top, width, height: LABEL_HEIGHT_PX, rx: 4, fill: "var(--measure-ink)" });
-    const text = document.createElementNS(SVG_NS3, "text");
+    const text = document.createElementNS(SVG_NS5, "text");
     text.setAttribute("x", String(left + width / 2));
     text.setAttribute("y", String(top + 15));
     text.setAttribute("text-anchor", "middle");

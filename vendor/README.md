@@ -12,9 +12,10 @@ a fork of [`aidenybai/react-grab`](https://github.com/aidenybai/react-grab).
 
 ## What the fork changes
 
-The plugins don't need it. Text, Deck, and Measure run on npm's
-`react-grab@0.2.0`, and the demo and e2e suite use that by default. The fork
-changes the palette toolbar:
+This is the React Grab the plugins are designed for, and the demo and e2e
+suite use it by default. Text, Deck, and Measure also run on npm's
+`react-grab@0.2.0` (`REACT_GRAB_BUILD=stock`). The fork changes the palette
+toolbar:
 
 - **A button per registered plugin action**, so Text gets its own toolbar
   button. On npm's react-grab, Text is reachable from the context menu, the
@@ -25,8 +26,8 @@ changes the palette toolbar:
 
 ## Why it is committed
 
-CI runs the suite a second time against this build
-(`REACT_GRAB_BUILD=fork npm test`) so the toolbar attachment keeps working on
+CI runs the suite against this build and again against npm's
+(`REACT_GRAB_BUILD=stock npm test`) so the toolbar attachment keeps working on
 both palettes. Rebuild by checking out the commit above and copying
 `packages/react-grab/dist/index.global.js` over this file.
 

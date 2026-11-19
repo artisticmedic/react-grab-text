@@ -11,6 +11,11 @@ const PANEL_TOGGLE = '[data-react-grab-deck-ui="panel-toggle"]';
 const PANEL = '[data-react-grab-deck-ui="panel"]';
 const DELETE_ITEM = '[data-react-grab-deck-ui="delete-item"]';
 const PANEL_MODE_TOGGLE = '[data-react-grab-deck-ui="panel-mode-toggle"]';
+const PANEL_SUMMARY = '[data-react-grab-deck-ui="panel-summary"]';
+const PANEL_PREVIEW = '[data-react-grab-deck-ui="panel-preview"]';
+const PANEL_COPY_ALL = '[data-react-grab-deck-ui="copy-all"]';
+const PANEL_BACK = '[data-react-grab-deck-ui="panel-back"]';
+const PANEL_ITEM = '[data-react-grab-deck-ui="panel-item"]';
 
 const clickDeckAffordance = async (demo: DemoPageObject): Promise<void> => {
   await demo.page.evaluate((attributeName) => {
@@ -192,9 +197,16 @@ test.describe("deck", () => {
   test("deck panel items can be edited in place", async ({ demo }) => {
     await copyGrab(demo, HEADLINE, 1);
     await clickPanelToggle(demo);
-    const preview = demo.page.locator('[data-react-grab-deck-ui="panel-preview"]');
+    // Rows are summaries until clicked, so no row is a scroll container of its
+    // own; the editor only exists while one item is open.
+    await expect(demo.page.locator(PANEL_PREVIEW)).toHaveCount(0);
+    await demo.page.locator(PANEL_SUMMARY).first().click();
+    const preview = demo.page.locator(PANEL_PREVIEW);
+    await expect(preview).toBeFocused();
     await preview.fill("edited grab body");
     await preview.blur();
+    await expect(preview).toHaveCount(0);
+    await expect(demo.page.locator(PANEL_SUMMARY).first()).toContainText("edited grab body");
 
     await clickDeckAffordance(demo);
     await expect(demo.page.locator(DECK_CHECK)).toHaveCSS("opacity", "1");
@@ -225,11 +237,12 @@ test.describe("deck", () => {
     await clickPanelToggle(demo);
 
     const modeButton = demo.page.locator(PANEL_MODE_TOGGLE);
-    await expect(modeButton).toHaveText("Batch on");
     await expect(modeButton).toHaveAttribute("aria-pressed", "true");
+    await expect(modeButton).toHaveAccessibleName("Turn batch mode off");
 
     await modeButton.click();
-    await expect(modeButton).toHaveText("Batch off");
+    await expect(modeButton).toHaveAttribute("aria-pressed", "false");
+    await expect(modeButton).toHaveAccessibleName("Turn batch mode on");
     await expect(demo.page.locator(DECK_TOGGLE)).toHaveAttribute("aria-pressed", "false");
 
     // Switching mode leaves the queue alone; it only stops new grabs joining it.
@@ -241,6 +254,84 @@ test.describe("deck", () => {
     }, TAGLINE);
     expect(copied).toBe(true);
     await expectDeckCount(demo, "1");
+  });
+
+  test("a queued text edit reads as a word diff in the panel", async ({ demo }) => {
+    await enableBatchMode(demo);
+    await demo.startEditing(HEADLINE);
+    await demo.selectAllInEditor();
+    await demo.page.keyboard.type("Ship copy without a handoff");
+    await demo.page.keyboard.press("Enter");
+    await demo.waitForTextEdit();
+    await expectDeckCount(demo, "1");
+
+    await clickPanelToggle(demo);
+    const summary = demo.page.locator(PANEL_SUMMARY).first();
+    await expect(summary.locator("del")).toHaveText("better");
+    await expect(summary.locator("ins")).toHaveCount(0);
+    await expect(summary).toContainText("Text edit · <h1>");
+  });
+
+  test("copy all from the panel copies the deck, closes the panel and says so", async ({
+    demo,
+  }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await copyGrab(demo, TAGLINE, 2);
+    await clickPanelToggle(demo);
+
+    const copyButton = demo.page.locator(PANEL_COPY_ALL);
+    await expect(copyButton).toHaveText("Copy 2 items");
+    await copyButton.click();
+
+    // The label and the check both clear after a flash, so look for them
+    // together rather than one after the other.
+    await Promise.all([
+      expect(demo.page.locator(PANEL)).toBeHidden(),
+      expect(demo.page.getByRole("status").filter({ hasText: "Copied 2 items" })).toBeVisible(),
+      expect(demo.page.locator(DECK_CHECK)).toHaveCSS("opacity", "1"),
+    ]);
+    const clipboard = await demo.readClipboard();
+    expect(clipboard).toMatch(/^1\.\n```\n\[<h1 data-testid="headline">/);
+    expect(clipboard).toContain("\n--\n2.\n```\n");
+  });
+
+  test("an open item edits alone and the header leads back to the list", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await copyGrab(demo, TAGLINE, 2);
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL_BACK)).toBeHidden();
+
+    await demo.page.locator(PANEL_SUMMARY).nth(1).click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toBeFocused();
+    await expect(demo.page.locator(PANEL_ITEM).first()).toBeHidden();
+    await expect(demo.page.locator('[data-react-grab-deck-ui="panel-position"]')).toHaveText("2 of 2");
+
+    await demo.page.locator(PANEL_BACK).click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toHaveCount(0);
+    await expect(demo.page.locator(PANEL_ITEM)).toHaveCount(2);
+    await expect(demo.page.locator(PANEL_ITEM).first()).toBeVisible();
+    await expect(demo.page.locator(PANEL_SUMMARY).nth(1)).toBeFocused();
+
+    // Escape takes the same way back.
+    await demo.page.locator(PANEL_SUMMARY).first().click();
+    await expect(demo.page.locator(PANEL_PREVIEW)).toBeFocused();
+    await demo.page.keyboard.press("Escape");
+    await expect(demo.page.locator(PANEL_PREVIEW)).toHaveCount(0);
+    await expect(demo.page.locator(PANEL_SUMMARY).first()).toBeFocused();
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+  });
+
+  test("opening the deck panel closes the React Grab menu that was open", async ({ demo }) => {
+    await copyGrab(demo, HEADLINE, 1);
+    await demo.activate();
+    await demo.page.locator(TAGLINE).hover({ force: true });
+    await demo.rightClickTarget(TAGLINE);
+
+    await clickPanelToggle(demo);
+    await expect(demo.page.locator(PANEL)).toBeVisible();
+    await expect
+      .poll(async () => (await demo.getContextMenuRow("Copy")).isPresent)
+      .toBe(false);
   });
 
   test("the deck panel closes on an outside click", async ({ demo }) => {

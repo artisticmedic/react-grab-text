@@ -10,7 +10,6 @@ export const REACT_GRAB_IGNORE_ATTRIBUTE = "data-react-grab-ignore";
 export const REACT_GRAB_IGNORE_EVENTS_ATTRIBUTE = "data-react-grab-ignore-events";
 export const REACT_GRAB_INPUT_ATTRIBUTE = "data-react-grab-input";
 
-export const HINT_PILL_OFFSET_PX = 8;
 export const HINT_PILL_VIEWPORT_MARGIN_PX = 8;
 export const SUCCESS_FLASH_DURATION_MS = 1600;
 export const OVERLAY_Z_INDEX = 2147483646;
